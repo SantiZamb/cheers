@@ -1,56 +1,76 @@
-# Welcome to your Expo app 👋
+# Cheers 🍻
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A social app for friends to capture, rate and share their nights out drinking beer, even when they're in different cities.
 
-## Get started
+**Go out → snap it → rate it → share it → friends react → join a challenge → go out again.**
 
-1. Install dependencies
+Cheers is a working **demo**: it runs entirely on the phone with sample friends who react to your posts, so the whole social loop can be tried without a backend.
 
-   ```bash
-   npm install
-   ```
+<p>
+  <img src="docs/screenshots/feed.jpg" width="200" alt="Feed" />
+  <img src="docs/screenshots/bars-nearby.jpg" width="200" alt="Best bars nearby" />
+  <img src="docs/screenshots/friends-map-dark.jpg" width="200" alt="Friends map, dark mode" />
+  <img src="docs/screenshots/profile-dark.jpg" width="200" alt="Profile, dark mode" />
+</p>
 
-2. Start the app
+## Features
 
-   ```bash
-   npx expo start
-   ```
+Five screens:
 
-In the output, you'll find options to open the app in a
+| Screen | What it does |
+|---|---|
+| **Feed** | Friends' beers, nights out and check-ins. React with 🍻 🔥 😂 🤤, comment inline, pull to refresh for new posts. "Out now" row and a banner for your current challenge. |
+| **Map** | **Friends:** see friends around the world, share your own location (off / city only / exact spot), add friends. **Best bars nearby:** pick a radius (500 m – 5 km) and get ranked bars, pubs and clubs with walking time, directions and one-tap check-in. |
+| **Share** | Post a 🍺 beer rating, a 🌙 night-out recap or a 📍 casual check-in, with a photo from the camera or library. |
+| **Challenges** | Weekly challenges with friends ("Three new beers", "Two nights out", "Cheers across the globe"), invites, leaderboards and an end-of-challenge recap. |
+| **Profile** | Stats, badges and a day-by-day history of your beers, nights and photos. |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Rewards are built in: posting, rating, reactions and finished challenges trigger short animations, haptics and a chime. Friend activity arrives as in-app banners and, when the app is in the background, as local notifications.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Getting started
 
-## Get a fresh project
-
-When you're ready, run:
+**Requirements:** Node 20.19 or newer, and the [Expo Go](https://expo.dev/go) app on your phone (or Xcode / Android Studio for simulators).
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Then scan the QR code with your phone's camera (iOS) or Expo Go (Android), or press `i` / `a` to open a simulator. Your phone and computer need to be on the same Wi‑Fi; if they can't see each other, use `npx expo start --tunnel`.
 
-### Other setup steps
+Everything the app uses ships inside Expo Go, so no custom native build is needed.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### Useful commands
 
-## Learn more
+```bash
+npx tsc --noEmit   # typecheck
+npx expo lint      # lint
+npx expo-doctor    # check dependencies and config
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## How the demo works
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **No backend.** Friends, posts and challenges are sample data (`src/data/seed.ts`). After you post, simulated friends react and comment over the next ~15 seconds.
+- **Saved on the device.** Your posts and photos persist between launches. *Profile → Reset demo data* restores the sample content.
+- **Location** is only requested when you turn on location sharing or search for bars. Friends' locations are fixed sample positions.
+- **Bars** come from [OpenStreetMap](https://www.openstreetmap.org/copyright) via the free public Overpass API. OpenStreetMap has no ratings, so "best" is a Cheers score: your crew's Cheers ratings for a venue first, then what the listing offers (brews its own beer, notable place, outdoor seating, …) and distance. The public server is sometimes overloaded; the app retries and shows a "try again" card if it can't get through.
+- **Notifications** are local only. Remote push isn't available in Expo Go on Android and would need a development build.
 
-## Join the community
+## Tech stack
 
-Join our community of developers creating universal apps.
+[Expo](https://expo.dev) SDK 57 · React Native 0.86 · React 19 with the React Compiler · TypeScript · Expo Router (native tabs) · Reanimated · react-native-maps · expo-location, expo-image-picker, expo-haptics, expo-audio, expo-notifications, expo-file-system.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Project structure
+
+```
+src/
+  app/          Screens (Expo Router): index (Feed), map, post (Share), challenges, profile
+  components/   UI building blocks: cards, buttons, post and challenge cards, map, panels
+  data/         Types, sample data, the app store (state + simulated friends), challenge logic, persistence
+  feedback/     Rewards: haptics, sounds, toasts and the celebration overlay
+  lib/          Location, geo helpers, bar search, notifications
+  constants/    Theme: colors (light + dark), spacing, radii
+assets/sounds/  Chime and pop sound effects
+```
+
+Developer notes on architecture and conventions are in [CLAUDE.md](CLAUDE.md).

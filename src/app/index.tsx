@@ -1,98 +1,213 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { useOutNow } from '@/components/friends-panel';
+import { PostCard } from '@/components/post-card';
+import { Screen, ScreenHeader } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
+import { challengeStatus, formatProgress, timeLeft } from '@/data/challenges';
+import { USERS } from '@/data/seed';
+import { useStore } from '@/data/store';
+import { useFeedback } from '@/feedback/feedback';
+import { useTheme } from '@/hooks/use-theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+export default function FeedScreen() {
+  const { feed, state, refreshFeed } = useStore();
+  const feedback = useFeedback();
+  const [refreshing, setRefreshing] = useState(false);
+  const cities = new Set(state.friendIds.map((id) => USERS[id].city)).size;
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    // A short pause so the pull feels like it fetched something.
+    setTimeout(() => {
+      if (!refreshFeed()) {
+        feedback.toast({ emoji: '✅', title: 'You’re all caught up', body: 'Go make some memories 🍻' });
+      }
+      setRefreshing(false);
+    }, 500);
+  };
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <Screen>
+      <FlatList
+        data={feed}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) =>
+          index < 4 ? (
+            <Animated.View entering={FadeInDown.delay(index * 40).duration(200)}>
+              <PostCard post={item} />
+            </Animated.View>
+          ) : (
+            <PostCard post={item} />
+          )
+        }
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <ScreenHeader
+              overline="Tonight"
+              title="Cheers"
+              subtitle={`${state.friendIds.length} friends · ${cities} cities`}
+            />
+            <OutNow />
+            <ChallengeBanner />
+          </View>
+        }
+      />
+    </Screen>
   );
 }
 
-export default function HomeScreen() {
+/** Stories-style row of friends; tapping one shows them on the map. */
+function OutNow() {
+  const theme = useTheme();
+  const { state, setMapFocus } = useStore();
+  const isOut = useOutNow();
+  const friends = state.friendIds
+    .map((id) => USERS[id])
+    .sort((a, b) => Number(isOut(b.id)) - Number(isOut(a.id)));
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stories}>
+      {friends.map((f) => {
+        const out = isOut(f.id);
+        return (
+          <Pressable
+            key={f.id}
+            onPress={() => {
+              setMapFocus(f.id);
+              router.navigate('/map');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Show ${f.name} on the map`}
+            style={styles.story}>
+            <LinearGradient
+              colors={out ? [theme.accent, theme.accentEnd] : [theme.border, theme.border]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.storyRing}>
+              <View style={[styles.storyInner, { backgroundColor: theme.backgroundElement, borderColor: theme.background }]}>
+                <Text style={styles.storyEmoji}>{f.avatar}</Text>
+              </View>
+            </LinearGradient>
+            <ThemedText type="small" numberOfLines={1} themeColor={out ? 'text' : 'textSecondary'}>
+              {f.name}
+            </ThemedText>
+            <ThemedText type="small" style={styles.storyCity} themeColor={out ? 'accentEnd' : 'textSecondary'}>
+              {out ? 'out now' : f.city}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** Nudges the user towards a pending invite or their closest-to-finishing challenge. */
+function ChallengeBanner() {
+  const theme = useTheme();
+  const { state } = useStore();
+  const candidates = state.challenges
+    .map((c) => ({ challenge: c, status: challengeStatus(c, state.posts) }))
+    .filter(({ status }) => status.active && (!status.joined || !status.done));
+  const current = candidates.find(({ status }) => !status.joined) ?? candidates[0];
+  if (!current) return null;
+  const { challenge, status } = current;
+
+  return (
+    <Pressable
+      onPress={() => router.navigate('/challenges')}
+      style={({ pressed }) => pressed && styles.pressed}
+      accessibilityRole="button">
+      <LinearGradient
+        colors={[theme.accent, theme.accentEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.banner}>
+        <Text style={styles.bannerEmoji}>{challenge.badge.emoji}</Text>
+        <View style={styles.flex}>
+          <ThemedText type="overline" style={[styles.onAccent, { color: theme.onAccent }]}>
+            {status.joined
+              ? 'Your challenge'
+              : `${challenge.invitedBy ? USERS[challenge.invitedBy].name + ' invited you' : 'New challenge'}`}
           </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
+          <ThemedText type="defaultSemiBold" style={{ color: theme.onAccent }}>
+            {challenge.title}
+          </ThemedText>
+          <ThemedText type="small" style={[styles.onAccent, { color: theme.onAccent }]}>
+            {status.joined ? `${formatProgress(challenge, status)} · ` : 'Tap to join · '}
+            {timeLeft(challenge.endsAt)}
+          </ThemedText>
+        </View>
+        <ThemedText type="subtitle" style={{ color: theme.onAccent }}>
+          ›
         </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      </LinearGradient>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
+  list: {
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    paddingBottom: BottomTabInset + Spacing.three,
+    gap: Spacing.three,
+  },
+  header: {
+    gap: Spacing.three,
+    paddingBottom: Spacing.one,
+  },
+  flex: {
+    flex: 1,
+  },
+  stories: {
+    gap: Spacing.three,
+    paddingVertical: Spacing.one,
+  },
+  story: {
+    alignItems: 'center',
+    width: 64,
+  },
+  storyRing: {
+    padding: 2.5,
+    borderRadius: 32,
+    marginBottom: Spacing.one,
+  },
+  storyInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyEmoji: {
+    fontSize: 28,
+  },
+  storyCity: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    borderRadius: Radius.lg,
+  },
+  bannerEmoji: {
+    fontSize: 32,
+  },
+  onAccent: {
+    opacity: 0.85,
+  },
+  pressed: {
+    opacity: 0.85,
   },
 });

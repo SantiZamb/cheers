@@ -4,7 +4,7 @@ import { Fonts, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ThemedTextProps = TextProps & {
-  type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
+  type?: 'default' | 'defaultSemiBold' | 'overline' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
   themeColor?: ThemeColor;
 };
 
@@ -16,6 +16,8 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
       style={[
         { color: theme[themeColor ?? 'text'] },
         type === 'default' && styles.default,
+        type === 'defaultSemiBold' && styles.defaultSemiBold,
+        type === 'overline' && styles.overline,
         type === 'title' && styles.title,
         type === 'small' && styles.small,
         type === 'smallBold' && styles.smallBold,
@@ -43,18 +45,33 @@ const styles = StyleSheet.create({
   },
   default: {
     fontSize: 16,
-    lineHeight: 24,
-    fontWeight: 500,
+    lineHeight: 23,
+    fontWeight: 400,
+  },
+  defaultSemiBold: {
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: 700,
+    letterSpacing: -0.2,
+  },
+  overline: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: 700,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
   },
   title: {
-    fontSize: 48,
-    fontWeight: 600,
-    lineHeight: 52,
+    fontSize: 44,
+    fontWeight: 800,
+    lineHeight: 48,
+    letterSpacing: -1.2,
   },
   subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
-    fontWeight: 600,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: 800,
+    letterSpacing: -0.9,
   },
   link: {
     lineHeight: 30,

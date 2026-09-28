@@ -7,21 +7,49 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+/**
+ * Clean & bold by day, nightlife by night: warm off-white with white cards in light mode,
+ * near-black with lifted surfaces in dark mode. Amber → orange gradient (`accent` → `accentEnd`)
+ * is reserved for primary actions, progress and highlights.
+ */
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#111113',
+    background: '#F6F5F2',
+    /** Card / surface color. */
+    backgroundElement: '#FFFFFF',
+    /** Subtle fill: inputs, tracks, unselected chips. */
+    backgroundSelected: '#EDEBE6',
+    textSecondary: '#6E6D73',
+    border: '#E7E4DE',
+    accent: '#FF9F0A',
+    accentEnd: '#FF5E1A',
+    accentSoft: '#FFF0DC',
+    onAccent: '#FFFFFF',
+    glass: 'rgba(255,255,255,0.78)',
+    shadow: 'rgba(17,17,19,0.08)',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#F5F5F7',
+    background: '#0A0A0C',
+    backgroundElement: '#17171B',
+    backgroundSelected: '#232329',
+    textSecondary: '#9C9CA6',
+    border: '#26262D',
+    accent: '#FFB23F',
+    accentEnd: '#FF6A2B',
+    accentSoft: '#2B1D0C',
+    onAccent: '#140B00',
+    glass: 'rgba(23,23,27,0.72)',
+    shadow: 'rgba(0,0,0,0.5)',
   },
+} as const;
+
+export const Radius = {
+  sm: 12,
+  md: 18,
+  lg: 26,
+  pill: 999,
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;

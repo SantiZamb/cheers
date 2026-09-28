@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Cheers",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -32,7 +32,22 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cheers uses your photos so you can share your beer and nights out with friends.",
+          "cameraPermission": "Cheers uses the camera so you can snap your beer and nights out."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cheers uses your location to find the best bars nearby and, if you choose, to show friends where you are."
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
