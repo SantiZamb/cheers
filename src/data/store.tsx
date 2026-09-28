@@ -1,5 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { ProfilePhotoContext } from '@/components/avatar';
+import { customBeerId, type Beer } from '@/data/beers';
+import { cardsFor, tierOf } from '@/data/cards';
 import { challengeStatus, formatProgress } from '@/data/challenges';
 import { clearPhotos, loadState, persistPhoto, saveState } from '@/data/persistence';
 import {
@@ -18,16 +21,17 @@ import type { CelebrationContent } from '@/feedback/celebration';
 import { getMyLocation } from '@/lib/location';
 import { cancelScheduledNotifications, ensureNotificationPermission, notifyLater } from '@/lib/notifications';
 
-export type NewPost = Pick<
-  Post,
-  'kind' | 'photo' | 'rating' | 'beer' | 'brewery' | 'style' | 'title' | 'beersCount' | 'venue' | 'note'
->;
+export type NewPost = Pick<Post, 'kind' | 'photo' | 'rating' | 'title' | 'beersCount' | 'venue' | 'note'> & {
+  /** The beer checked in (for `beer` posts). Custom beers are remembered for next time. */
+  beer?: Beer;
+};
 
 type Store = {
   state: AppState;
   /** Posts from the user and their friends, newest first. */
   feed: Post[];
   addPost: (input: NewPost) => void;
+  setProfilePhoto: (uri: string) => void;
   toggleReaction: (postId: string, reaction: Reaction) => void;
   addComment: (postId: string, text: string) => void;
   addFriend: (userId: string) => void;
@@ -101,7 +105,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         : `${friend.name} reacted ${event.reaction} to ${headline}`;
       const body = event.comment ?? `Cheers from ${friend.city}!`;
 
-      notifyLater(`${friend.avatar} ${title}`, body, event.seconds, '/');
+      notifyLater(title, body, event.seconds, '/');
       later(event.seconds, () => {
         updatePost(post.id, (p) =>
           event.comment
@@ -120,7 +124,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 },
               }
         );
-        feedback.toast({ emoji: event.comment ? '💬' : event.reaction!, title, body });
+        feedback.toast({ user: friend, emoji: event.comment ? '💬' : event.reaction!, title, body });
       });
     }
 
@@ -137,9 +141,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addPost = (input: NewPost) => {
+  const addPost = ({ beer, ...input }: NewPost) => {
     const post: Post = {
       ...input,
+      ...(beer && { beerId: beer.id, beer: beer.name, brewery: beer.brewery, style: beer.style }),
       photo: input.photo ? persistPhoto(input.photo) : undefined,
       id: `p${Date.now()}`,
       userId: ME_ID,
@@ -148,7 +153,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reactions: {},
       comments: [],
     };
-    const next: AppState = { ...state, posts: [post, ...state.posts] };
+    const isNewCustomBeer =
+      !!beer && beer.id === customBeerId(beer.name) && !state.customBeers.some((c) => c.id === beer.id);
+    const next: AppState = {
+      ...state,
+      posts: [post, ...state.posts],
+      customBeers: isNewCustomBeer ? [...state.customBeers, beer] : state.customBeers,
+    };
 
     // Work out which of the user's active challenges this post moved forward.
     const lines: NonNullable<CelebrationContent['lines']> = [];
@@ -163,16 +174,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Beer cards: a new card, level-ups, and tier-ups (including same-brewery cards).
+    const cardsBefore = cardsFor(state.posts, ME_ID, state.customBeers);
+    const cardsAfter = cardsFor(next.posts, ME_ID, next.customBeers);
+    const mainCard = cardsAfter.find((c) => c.beer.id === post.beerId);
+    for (const card of cardsAfter) {
+      const before = cardsBefore.find((c) => c.beer.id === card.beer.id);
+      if (!before) {
+        lines.unshift({ emoji: '🃏', text: `New card: ${card.beer.name}!`, highlight: true });
+      } else if (card.tierIndex > before.tierIndex) {
+        lines.unshift({ emoji: '⬆️', text: `${card.beer.name} reached ${tierOf(card.level).tier.name}!`, highlight: true });
+      } else if (card.level > before.level) {
+        lines.unshift({ emoji: '🃏', text: `${card.beer.name} card → Lv ${card.level}` });
+      } else if (card.xp > before.xp && card.beer.id !== post.beerId) {
+        lines.push({ emoji: '🃏', text: `${card.beer.name} card +½ level (same brewery)` });
+      } else if (card.xp > before.xp) {
+        lines.unshift({ emoji: '🃏', text: `${card.beer.name} card: halfway to Lv ${card.level + 1}` });
+      }
+    }
+
     setState(next);
     const kind = KIND_LABELS[post.kind];
     feedback.celebrate({
+      card: mainCard,
       emoji: post.kind === 'night' ? '🌙' : '🍻',
       title: 'Cheers!',
       subtitle: `Your ${kind.label.toLowerCase()} is live for ${state.friendIds.length} friends`,
-      lines,
+      lines: lines.slice(0, 4),
     });
 
     ensureNotificationPermission().finally(() => simulateFriendResponses(post));
+  };
+
+  const setProfilePhoto = (uri: string) => {
+    setState((s) => ({ ...s, profilePhoto: persistPhoto(uri) }));
+    feedback.pop();
   };
 
   const toggleReaction = (postId: string, reaction: Reaction) => {
@@ -203,7 +239,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, friendIds: [...s.friendIds, userId] }));
     const friend = USERS[userId];
     feedback.toast({
-      emoji: friend.avatar,
+      user: friend,
       title: `You and ${friend.name} are now friends`,
       body: `Their nights out in ${friend.city} will show up in your feed.`,
     });
@@ -242,7 +278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
     const friend = USERS[friendId];
     feedback.toast({
-      emoji: friend.avatar,
+      user: friend,
       title: `${friend.name} just posted from ${friend.city}`,
       body: postHeadline(post),
     });
@@ -278,6 +314,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const city = state.location.me?.city ?? ME.city;
       later(5, () =>
         feedback.toast({
+          user: friend,
           emoji: '👀',
           title: `${friend.name} sees you're out in ${city}`,
           body: `“Save me a seat!” from ${friend.city}`,
@@ -305,6 +342,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         state,
         feed,
         addPost,
+        setProfilePhoto,
         toggleReaction,
         addComment,
         addFriend,
@@ -319,7 +357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mapFocus,
         setMapFocus,
       }}>
-      {children}
+      <ProfilePhotoContext.Provider value={state.profilePhoto}>{children}</ProfilePhotoContext.Provider>
     </StoreContext.Provider>
   );
 }

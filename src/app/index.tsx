@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { Avatar } from '@/components/avatar';
 import { useOutNow } from '@/components/friends-panel';
 import { PostCard } from '@/components/post-card';
 import { Screen, ScreenHeader } from '@/components/screen';
@@ -92,8 +93,8 @@ function OutNow() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.storyRing}>
-              <View style={[styles.storyInner, { backgroundColor: theme.backgroundElement, borderColor: theme.background }]}>
-                <Text style={styles.storyEmoji}>{f.avatar}</Text>
+              <View style={[styles.storyInner, { borderColor: theme.background }]}>
+                <Avatar user={f} size={53} />
               </View>
             </LinearGradient>
             <ThemedText type="small" numberOfLines={1} themeColor={out ? 'text' : 'textSecondary'}>
@@ -186,9 +187,7 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  storyEmoji: {
-    fontSize: 28,
+    overflow: 'hidden',
   },
   storyCity: {
     fontSize: 11,

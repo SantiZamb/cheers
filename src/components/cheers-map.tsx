@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
 
+import { Avatar } from '@/components/avatar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import type { User } from '@/data/types';
@@ -152,7 +153,7 @@ function FriendPin({ friend, selected }: { friend: MapFriend; selected: boolean 
     <View style={styles.pinWrap}>
       <LinearGradient colors={ring} style={[styles.ring, selected && styles.ringSelected]}>
         <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-          <Text style={styles.avatarEmoji}>{friend.user.avatar}</Text>
+          <Avatar user={friend.user} size={38} />
         </View>
       </LinearGradient>
       <View style={[styles.nameTag, { backgroundColor: theme.backgroundElement }]}>
@@ -211,9 +212,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarEmoji: {
-    fontSize: 22,
   },
   nameTag: {
     marginTop: 3,

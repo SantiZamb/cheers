@@ -15,13 +15,15 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
+import { BeerPicker } from '@/components/beer-picker';
 import { Chip } from '@/components/chip';
 import { GradientButton } from '@/components/gradient-button';
 import { Rating } from '@/components/rating';
 import { Screen, ScreenHeader } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
-import { BEER_STYLES, KIND_LABELS } from '@/data/seed';
+import type { Beer } from '@/data/beers';
+import { KIND_LABELS } from '@/data/seed';
 import { useStore } from '@/data/store';
 import type { PostKind } from '@/data/types';
 import { useFeedback } from '@/feedback/feedback';
@@ -42,9 +44,7 @@ export default function PostScreen() {
 
   const [kind, setKind] = useState<PostKind>('beer');
   const [photo, setPhoto] = useState<string>();
-  const [beer, setBeer] = useState('');
-  const [brewery, setBrewery] = useState('');
-  const [style, setStyle] = useState(BEER_STYLES[0]);
+  const [beer, setBeer] = useState<Beer | null>(null);
   const [title, setTitle] = useState('');
   const [beersCount, setBeersCount] = useState(2);
   const [rating, setRating] = useState(4);
@@ -56,7 +56,7 @@ export default function PostScreen() {
 
   const canShare =
     kind === 'beer'
-      ? beer.trim().length > 0
+      ? !!beer
       : kind === 'night'
         ? title.trim().length > 0 || !!photo
         : note.trim().length > 0 || !!photo;
@@ -101,17 +101,14 @@ export default function PostScreen() {
       kind,
       photo,
       rating: kind === 'checkin' ? undefined : rating,
-      beer: kind === 'beer' ? beer.trim() : undefined,
-      brewery: kind === 'beer' ? brewery.trim() || 'Unknown brewery' : undefined,
-      style: kind === 'beer' ? style : undefined,
+      beer: kind === 'beer' ? (beer ?? undefined) : undefined,
       title: kind === 'night' ? title.trim() || 'Night out' : undefined,
       beersCount: kind === 'night' ? beersCount : undefined,
       venue: venue.trim() || undefined,
       note: note.trim(),
     });
     setPhoto(undefined);
-    setBeer('');
-    setBrewery('');
+    setBeer(null);
     setTitle('');
     setBeersCount(2);
     setRating(4);
@@ -169,33 +166,7 @@ export default function PostScreen() {
           <Animated.View key={kind} entering={FadeInDown.duration(250)} style={styles.content0}>
             {kind === 'beer' && (
               <>
-                <TextInput
-                  value={beer}
-                  onChangeText={setBeer}
-                  placeholder="Beer name"
-                  placeholderTextColor={theme.textSecondary}
-                  style={inputStyle}
-                />
-                <TextInput
-                  value={brewery}
-                  onChangeText={setBrewery}
-                  placeholder="Brewery"
-                  placeholderTextColor={theme.textSecondary}
-                  style={inputStyle}
-                />
-                <View style={styles.chips}>
-                  {BEER_STYLES.map((s) => (
-                    <Chip
-                      key={s}
-                      label={s}
-                      selected={s === style}
-                      onPress={() => {
-                        setStyle(s);
-                        feedback.select();
-                      }}
-                    />
-                  ))}
-                </View>
+                <BeerPicker value={beer} onChange={setBeer} />
               </>
             )}
 
@@ -364,11 +335,6 @@ const styles = StyleSheet.create({
   multiline: {
     minHeight: 88,
     textAlignVertical: 'top',
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
   },
   stepperRow: {
     flexDirection: 'row',

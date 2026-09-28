@@ -1,7 +1,10 @@
+import type { Beer } from '@/data/beers';
+
 export type User = {
   id: string;
   name: string;
-  avatar: string;
+  /** Profile photo URL. Missing → initials. */
+  photo?: string;
   city: string;
   /** Where the friend was last seen out (their shared location). */
   lat: number;
@@ -40,6 +43,8 @@ export type Post = {
   photo?: string;
   /** 1–5. Rates the beer for `beer` posts and the night for `night` posts. */
   rating?: number;
+  /** Catalog or custom beer id; drives beer cards. */
+  beerId?: string;
   beer?: string;
   brewery?: string;
   style?: string;
@@ -82,6 +87,10 @@ export type AppState = {
   posts: Post[];
   friendIds: string[];
   challenges: Challenge[];
+  /** The user's own profile photo (local file URI). */
+  profilePhoto?: string;
+  /** Beers the user typed that aren't in the catalog. */
+  customBeers: Beer[];
   location: {
     sharing: LocationSharing;
     me?: MyLocation;

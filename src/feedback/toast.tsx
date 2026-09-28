@@ -2,18 +2,25 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeOutUp, SlideInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Avatar } from '@/components/avatar';
 import { Glass } from '@/components/glass';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import type { User } from '@/data/types';
+import { useTheme } from '@/hooks/use-theme';
 
 export type ToastContent = {
-  emoji: string;
+  /** Shown on its own, or as a small badge on the user's photo. */
+  emoji?: string;
+  /** The friend this is about; shows their photo. */
+  user?: User;
   title: string;
   body?: string;
 };
 
 export function Toast({ content }: { content: ToastContent }) {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
 
   return (
     <View pointerEvents="none" style={[styles.wrap, { top: insets.top + Spacing.one }]}>
@@ -22,7 +29,18 @@ export function Toast({ content }: { content: ToastContent }) {
         exiting={FadeOutUp.duration(160)}
         style={styles.shadow}>
         <Glass style={styles.toast}>
-          <Text style={styles.emoji}>{content.emoji}</Text>
+          {content.user ? (
+            <View>
+              <Avatar user={content.user} size={36} />
+              {content.emoji ? (
+                <View style={[styles.badge, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={styles.badgeEmoji}>{content.emoji}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.emoji}>{content.emoji}</Text>
+          )}
           <View style={styles.text}>
             <ThemedText type="smallBold" numberOfLines={1}>
               {content.title}
@@ -65,6 +83,19 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 24,
+  },
+  badge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeEmoji: {
+    fontSize: 12,
   },
   text: {
     flex: 1,

@@ -11,8 +11,10 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 
+import { BeerCardView } from '@/components/beer-card';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import type { BeerCard } from '@/data/cards';
 import { useTheme } from '@/hooks/use-theme';
 
 export type CelebrationContent = {
@@ -21,6 +23,8 @@ export type CelebrationContent = {
   subtitle?: string;
   /** Extra rows, e.g. challenge progress that this action moved forward. */
   lines?: { emoji: string; text: string; highlight?: boolean }[];
+  /** Beer card earned or upgraded by this action; shown instead of the emoji badge. */
+  card?: BeerCard;
 };
 
 const CONFETTI = ['🍺', '🍻', '✨', '🎉', '⭐️'];
@@ -57,13 +61,19 @@ export function Celebration({
         <Animated.View
           entering={ZoomIn.duration(220).easing(Easing.out(Easing.back(1.6)))}
           style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
-          <LinearGradient
-            colors={[theme.accent, theme.accentEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.emojiBadge}>
-            <Text style={styles.bigEmoji}>{content.emoji}</Text>
-          </LinearGradient>
+          {content.card ? (
+            <View style={styles.cardWrap}>
+              <BeerCardView card={content.card} size="sm" />
+            </View>
+          ) : (
+            <LinearGradient
+              colors={[theme.accent, theme.accentEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.emojiBadge}>
+              <Text style={styles.bigEmoji}>{content.emoji}</Text>
+            </LinearGradient>
+          )}
           <ThemedText type="subtitle" style={styles.center}>
             {content.title}
           </ThemedText>
@@ -164,6 +174,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.one,
+  },
+  cardWrap: {
+    marginTop: -Spacing.six,
+    marginBottom: Spacing.one,
+    transform: [{ rotate: '-4deg' }],
   },
   bigEmoji: {
     fontSize: 40,

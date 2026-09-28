@@ -48,7 +48,7 @@ export function ChallengeCard({ challenge }: { challenge: Challenge }) {
           <View style={[styles.invite, { backgroundColor: theme.accentSoft }]}>
             <ThemedText type="small" style={styles.flex}>
               {challenge.invitedBy
-                ? `${USERS[challenge.invitedBy].avatar} ${USERS[challenge.invitedBy].name} invited you`
+                ? `${USERS[challenge.invitedBy].name} invited you`
                 : 'Open to join'}
               {' · '}
               {timeLeft(challenge.endsAt)}
@@ -147,7 +147,7 @@ function Recap({ challenge }: { challenge: Challenge }) {
       <ThemedText>🌍 drank in {recap.cities.join(', ')}</ThemedText>
       {recap.mvp && (
         <ThemedText>
-          ⭐️ MVP: {recap.mvp.avatar} {recap.mvp.name}
+          ⭐️ MVP: {recap.mvp.name}
         </ThemedText>
       )}
       <ThemedText>

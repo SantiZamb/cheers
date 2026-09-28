@@ -52,7 +52,7 @@ export function PostCard({ post }: { post: Post }) {
               {post.beer}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {[post.brewery, post.style].filter(Boolean).join(' · ')}
+              {[post.brewery, post.style].filter((v) => v && v !== 'Unknown brewery' && v !== 'Beer').join(' · ')}
             </ThemedText>
           </>
         )}
@@ -166,7 +166,7 @@ function Comments({ post }: { post: Post }) {
       )}
       {shown.map((c) => (
         <Animated.View key={c.id} entering={FadeIn.duration(150)} style={styles.comment}>
-          <Text style={styles.commentAvatar}>{USERS[c.userId].avatar}</Text>
+          <Avatar user={USERS[c.userId]} size={22} />
           <ThemedText type="small" style={styles.flex}>
             <ThemedText type="smallBold">{USERS[c.userId].name} </ThemedText>
             {c.text}
@@ -184,6 +184,10 @@ function Comments({ post }: { post: Post }) {
             autoFocus
             returnKeyType="send"
             onSubmitEditing={send}
+            // Tapping away without typing closes the box again.
+            onBlur={() => {
+              if (!text.trim()) setReplying(false);
+            }}
             style={[styles.replyInput, { color: theme.text }]}
           />
           <Pressable onPress={send} hitSlop={8} accessibilityRole="button" accessibilityLabel="Send comment">
@@ -260,9 +264,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two,
     alignItems: 'flex-start',
-  },
-  commentAvatar: {
-    fontSize: 15,
   },
   replyRow: {
     flexDirection: 'row',

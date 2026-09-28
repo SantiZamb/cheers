@@ -1,16 +1,20 @@
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
+import { BeerCardView } from '@/components/beer-card';
 import { Card } from '@/components/card';
+import { CardViewer } from '@/components/card-viewer';
 import { Chip } from '@/components/chip';
 import { Rating } from '@/components/rating';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
+import { cardsFor } from '@/data/cards';
 import { challengeStatus } from '@/data/challenges';
 import { KIND_LABELS, ME, ME_ID } from '@/data/seed';
 import { postHeadline, useStore } from '@/data/store';
@@ -29,9 +33,27 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 export default function ProfileScreen() {
   const theme = useTheme();
-  const { state, resetDemo, myCity } = useStore();
+  const { state, resetDemo, myCity, setProfilePhoto } = useStore();
   const feedback = useFeedback();
   const [filter, setFilter] = useState<Filter>('all');
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
+
+  const cards = cardsFor(state.posts, ME_ID, state.customBeers);
+  const openCard = cards.find((c) => c.beer.id === openCardId) ?? null;
+
+  const pickProfilePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]) setProfilePhoto(result.assets[0].uri);
+    } catch {
+      Alert.alert('Couldn’t open your photos', 'Allow photo access for Cheers in Settings.');
+    }
+  };
 
   const mine = state.posts
     .filter((p) => p.userId === ME_ID)
@@ -50,6 +72,11 @@ export default function ProfileScreen() {
     { emoji: '🍺', name: 'First Sip', earned: mine.length >= 1 },
     { emoji: '📸', name: 'Shutterbug', earned: mine.some((p) => p.photo) },
     { emoji: '🎨', name: 'Style Hopper', earned: new Set(beers.map((p) => p.style)).size >= 3 },
+    { emoji: '🃏', name: 'Collector', earned: cards.length >= 5 },
+    { emoji: '🥈', name: 'Silver Sipper', earned: cards.some((c) => c.tierIndex >= 1) },
+    { emoji: '🥇', name: 'Gold Standard', earned: cards.some((c) => c.tierIndex >= 2) },
+    { emoji: '💠', name: 'Platinum Pour', earned: cards.some((c) => c.tierIndex >= 3) },
+    { emoji: '👑', name: 'Legend', earned: cards.some((c) => c.tierIndex >= 4) },
     ...state.challenges.map((c) => ({
       ...c.badge,
       earned: challengeStatus(c, state.posts).done,
@@ -77,9 +104,16 @@ export default function ProfileScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.hero}>
-          <View style={[styles.heroAvatar, { borderColor: theme.onAccent }]}>
+          <Pressable
+            onPress={pickProfilePhoto}
+            accessibilityRole="button"
+            accessibilityLabel="Change profile photo"
+            style={[styles.heroAvatar, { borderColor: theme.onAccent }]}>
             <Avatar user={ME} size={72} />
-          </View>
+            <View style={[styles.cameraBadge, { backgroundColor: theme.onAccent }]}>
+              <Text style={styles.cameraEmoji}>📷</Text>
+            </View>
+          </Pressable>
           <View style={styles.flex}>
             <ThemedText type="overline" style={[styles.heroSoft, { color: theme.onAccent }]}>
               Your nights
@@ -99,6 +133,34 @@ export default function ProfileScreen() {
           <Stat label="Avg rating" value={avg} />
           <Stat label="Cheers got" value={String(cheersReceived)} />
         </View>
+
+        <View style={styles.sectionHead}>
+          <ThemedText type="overline" themeColor="textSecondary">
+            Beer cards · {cards.length}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Drink it again to level up
+          </ThemedText>
+        </View>
+        {cards.length === 0 ? (
+          <ThemedText themeColor="textSecondary">Check in a beer to collect your first card.</ThemedText>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards}>
+            {cards.map((c) => (
+              <Pressable
+                key={c.beer.id}
+                onPress={() => {
+                  feedback.select();
+                  setOpenCardId(c.beer.id);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`${c.beer.name} card, level ${c.level}`}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <BeerCardView card={c} size="sm" />
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
 
         <ThemedText type="overline" themeColor="textSecondary">
           Badges
@@ -155,6 +217,8 @@ export default function ProfileScreen() {
             </Animated.View>
           ))
         )}
+
+        <CardViewer card={openCard} onClose={() => setOpenCardId(null)} />
 
         <Pressable onPress={confirmReset} style={styles.reset} accessibilityRole="button">
           <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -253,6 +317,33 @@ const styles = StyleSheet.create({
   heroAvatar: {
     borderWidth: 3,
     borderRadius: 40,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraEmoji: {
+    fontSize: 13,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  cards: {
+    gap: Spacing.three,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.one,
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
   },
   heroSoft: {
     opacity: 0.85,

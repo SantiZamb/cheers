@@ -1,24 +1,22 @@
 import type { AppState, Challenge, Post, PostKind, User } from '@/data/types';
 
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export const ME_ID = 'me';
 
 export const USERS: Record<string, User> = {
-  me: { id: 'me', name: 'You', avatar: '🧔', city: 'Chicago', lat: 41.8837, lng: -87.6325 },
-  maya: { id: 'maya', name: 'Maya', avatar: '👩🏽‍🦱', city: 'Denver', lat: 39.7527, lng: -104.9993 },
-  leo: { id: 'leo', name: 'Leo', avatar: '👨🏻‍🦰', city: 'Dublin', lat: 53.3455, lng: -6.2643 },
-  priya: { id: 'priya', name: 'Priya', avatar: '👩🏾', city: 'London', lat: 51.4739, lng: -0.0691 },
-  sam: { id: 'sam', name: 'Sam', avatar: '🧑🏼‍🎤', city: 'Austin', lat: 30.2672, lng: -97.7431 },
+  me: { id: 'me', name: 'You', city: 'Chicago', lat: 41.8837, lng: -87.6325 },
+  maya: { id: 'maya', name: 'Maya', photo: 'https://randomuser.me/api/portraits/women/68.jpg', city: 'Denver', lat: 39.7527, lng: -104.9993 },
+  leo: { id: 'leo', name: 'Leo', photo: 'https://randomuser.me/api/portraits/men/32.jpg', city: 'Dublin', lat: 53.3455, lng: -6.2643 },
+  priya: { id: 'priya', name: 'Priya', photo: 'https://randomuser.me/api/portraits/women/65.jpg', city: 'London', lat: 51.4739, lng: -0.0691 },
+  sam: { id: 'sam', name: 'Sam', photo: 'https://randomuser.me/api/portraits/men/46.jpg', city: 'Austin', lat: 30.2672, lng: -97.7431 },
   // Suggested friends, not connected at first.
-  jonas: { id: 'jonas', name: 'Jonas', avatar: '👨🏼‍🦳', city: 'Berlin', lat: 52.4983, lng: 13.4186 },
-  aiko: { id: 'aiko', name: 'Aiko', avatar: '👩🏻', city: 'Tokyo', lat: 35.6595, lng: 139.7005 },
-  carlos: { id: 'carlos', name: 'Carlos', avatar: '🧑🏽‍🦲', city: 'Mexico City', lat: 19.4194, lng: -99.1616 },
+  jonas: { id: 'jonas', name: 'Jonas', photo: 'https://randomuser.me/api/portraits/men/85.jpg', city: 'Berlin', lat: 52.4983, lng: 13.4186 },
+  aiko: { id: 'aiko', name: 'Aiko', photo: 'https://randomuser.me/api/portraits/women/12.jpg', city: 'Tokyo', lat: 35.6595, lng: 139.7005 },
+  carlos: { id: 'carlos', name: 'Carlos', photo: 'https://randomuser.me/api/portraits/men/22.jpg', city: 'Mexico City', lat: 19.4194, lng: -99.1616 },
 };
 
 export const ME = USERS[ME_ID];
-
-export const BEER_STYLES = ['IPA', 'Hazy IPA', 'Lager', 'Pilsner', 'Stout', 'Porter', 'Sour', 'Wheat', 'Amber'];
 
 export const KIND_LABELS: Record<PostKind, { emoji: string; label: string }> = {
   beer: { emoji: '🍺', label: 'Beer' },
@@ -59,6 +57,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'maya',
         kind: 'beer',
+        beerId: 'hazy-little-thing',
         beer: 'Hazy Little Thing',
         brewery: 'Sierra Nevada',
         style: 'Hazy IPA',
@@ -85,6 +84,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'priya',
         kind: 'beer',
+        beerId: 'pliny-the-elder',
         beer: 'Pliny the Elder',
         brewery: 'Russian River',
         style: 'IPA',
@@ -106,6 +106,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'me',
         kind: 'beer',
+        beerId: 'fat-tire',
         beer: 'Fat Tire',
         brewery: 'New Belgium',
         style: 'Amber',
@@ -131,6 +132,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'jonas',
         kind: 'beer',
+        beerId: 'berliner-weisse',
         beer: 'Berliner Weisse',
         brewery: 'Schneeeule',
         style: 'Sour',
@@ -142,6 +144,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'aiko',
         kind: 'beer',
+        beerId: 'hitachino-white',
         beer: 'Hitachino Nest White Ale',
         brewery: 'Kiuchi',
         style: 'Wheat',
@@ -150,10 +153,48 @@ function seedPosts(now: number): Post[] {
         city: 'Tokyo',
         ago: 9 * HOUR,
       },
+      // Older history (outside every challenge window) so the card collection has some depth.
+      ...[16, 19, 23, 27, 31, 36].map((days, i) => ({
+        userId: 'me',
+        kind: 'beer' as const,
+        beerId: 'fat-tire',
+        beer: 'Fat Tire',
+        brewery: 'New Belgium',
+        style: 'Amber',
+        rating: 4,
+        note: ['Old reliable.', 'Friday tradition.', 'Still great.', 'Game night pour.', 'Can’t beat it.', 'First of many.'][i],
+        city: 'Chicago',
+        ago: days * DAY,
+      })),
+      ...[18, 29].map((days) => ({
+        userId: 'me',
+        kind: 'beer' as const,
+        beerId: 'guinness-draught',
+        beer: 'Guinness Draught',
+        brewery: 'Guinness',
+        style: 'Stout',
+        rating: 5,
+        note: 'Patience rewarded.',
+        city: 'Chicago',
+        ago: days * DAY,
+      })),
+      {
+        userId: 'me',
+        kind: 'beer',
+        beerId: 'voodoo-ranger',
+        beer: 'Voodoo Ranger IPA',
+        brewery: 'New Belgium',
+        style: 'IPA',
+        rating: 3,
+        note: 'Bit much for me, but counts for the Fat Tire card.',
+        city: 'Chicago',
+        ago: 21 * DAY,
+      },
       // Last week's ended challenge ("Stout Season") draws on these.
       {
         userId: 'me',
         kind: 'beer',
+        beerId: 'guinness-draught',
         beer: 'Guinness Draught',
         brewery: 'Guinness',
         style: 'Stout',
@@ -165,7 +206,8 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'me',
         kind: 'beer',
-        beer: 'Founders Breakfast Stout',
+        beerId: 'founders-breakfast-stout',
+        beer: 'Breakfast Stout',
         brewery: 'Founders',
         style: 'Stout',
         rating: 4,
@@ -176,6 +218,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'leo',
         kind: 'beer',
+        beerId: 'murphys-stout',
         beer: 'Murphy’s Irish Stout',
         brewery: 'Heineken Ireland',
         style: 'Stout',
@@ -187,6 +230,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'priya',
         kind: 'beer',
+        beerId: 'london-porter',
         beer: 'London Porter',
         brewery: "Fuller's",
         style: 'Porter',
@@ -198,6 +242,7 @@ function seedPosts(now: number): Post[] {
       {
         userId: 'maya',
         kind: 'beer',
+        beerId: 'old-rasputin',
         beer: 'Old Rasputin',
         brewery: 'North Coast',
         style: 'Stout',
@@ -217,6 +262,7 @@ export const FRIEND_POST_POOL: Omit<Draft, 'ago'>[] = [
   {
     userId: 'sam',
     kind: 'beer',
+    beerId: 'shiner-bock',
     beer: 'Shiner Bock',
     brewery: 'Spoetzl',
     style: 'Lager',
@@ -244,6 +290,7 @@ export const FRIEND_POST_POOL: Omit<Draft, 'ago'>[] = [
   {
     userId: 'maya',
     kind: 'beer',
+    beerId: 'juicy-haze',
     beer: 'Juicy Haze',
     brewery: 'New Belgium',
     style: 'Hazy IPA',
@@ -327,6 +374,7 @@ export function createSeedState(now = Date.now()): AppState {
     posts: seedPosts(now),
     friendIds: ['maya', 'leo', 'priya', 'sam'],
     challenges: seedChallenges(now),
+    customBeers: [],
     location: { sharing: 'off' },
     nextPoolIndex: 0,
   };

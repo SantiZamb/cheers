@@ -21,9 +21,11 @@ Five screens:
 |---|---|
 | **Feed** | Friends' beers, nights out and check-ins. React with 🍻 🔥 😂 🤤, comment inline, pull to refresh for new posts. "Out now" row and a banner for your current challenge. |
 | **Map** | **Friends:** see friends around the world, share your own location (off / city only / exact spot), add friends. **Best bars nearby:** pick a radius (500 m – 5 km) and get ranked bars, pubs and clubs with walking time, directions and one-tap check-in. |
-| **Share** | Post a 🍺 beer rating, a 🌙 night-out recap or a 📍 casual check-in, with a photo from the camera or library. |
+| **Share** | Post a 🍺 beer rating (search and select the beer), a 🌙 night-out recap or a 📍 casual check-in, with a photo from the camera or library. |
 | **Challenges** | Weekly challenges with friends ("Three new beers", "Two nights out", "Cheers across the globe"), invites, leaderboards and an end-of-challenge recap. |
-| **Profile** | Stats, badges and a day-by-day history of your beers, nights and photos. |
+| **Profile** | Your photo, stats, beer card collection, badges and a day-by-day history of your beers, nights and photos. |
+
+**Beer cards.** The first time you check in a beer you collect its card. Drinking it again levels the card up: 5 tiers (Bronze, Silver, Gold, Platinum, Legendary) × 5 levels, up to level 25. Each check-in of that beer is +1 level; another beer from the same brewery is +½ level (capped at what you've had of the beer itself).
 
 Rewards are built in: posting, rating, reactions and finished challenges trigger short animations, haptics and a chime. Friend activity arrives as in-app banners and, when the app is in the background, as local notifications.
 
@@ -50,7 +52,7 @@ npx expo-doctor    # check dependencies and config
 
 ## How the demo works
 
-- **No backend.** Friends, posts and challenges are sample data (`src/data/seed.ts`). After you post, simulated friends react and comment over the next ~15 seconds.
+- **No backend.** Friends, posts and challenges are sample data (`src/data/seed.ts`). Friends' profile photos are placeholder portraits from randomuser.me; the beer list is a built-in catalog (`src/data/beers.ts`), and beers not in it can be added by name. After you post, simulated friends react and comment over the next ~15 seconds.
 - **Saved on the device.** Your posts and photos persist between launches. *Profile → Reset demo data* restores the sample content.
 - **Location** is only requested when you turn on location sharing or search for bars. Friends' locations are fixed sample positions.
 - **Bars** come from [OpenStreetMap](https://www.openstreetmap.org/copyright) via the free public Overpass API. OpenStreetMap has no ratings, so "best" is a Cheers score: your crew's Cheers ratings for a venue first, then what the listing offers (brews its own beer, notable place, outdoor seating, …) and distance. The public server is sometimes overloaded; the app retries and shows a "try again" card if it can't get through.
