@@ -8,6 +8,7 @@ import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { Avatar } from '@/components/avatar';
 import { BeerCardView } from '@/components/beer-card';
 import { Card } from '@/components/card';
+import { BadgesPage } from '@/components/badges-page';
 import { CardViewer } from '@/components/card-viewer';
 import { Chip } from '@/components/chip';
 import { Rating } from '@/components/rating';
@@ -16,7 +17,7 @@ import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
 import { cardsFor } from '@/data/cards';
 import { KIND_LABELS } from '@/data/seed';
-import { postHeadline, useChallengeStatus, useStore } from '@/data/store';
+import { postHeadline, useStore } from '@/data/store';
 import type { Post } from '@/data/types';
 import { useFeedback } from '@/feedback/feedback';
 import { useTheme } from '@/hooks/use-theme';
@@ -32,11 +33,17 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 export default function ProfileScreen() {
   const theme = useTheme();
-  const { state, me, myId, signOut, myCity, setProfilePhoto, openTutorial } = useStore();
-  const statusOf = useChallengeStatus();
+  const { state, me, myId, signOut, myCity, setProfilePhoto, openTutorial, badges } = useStore();
   const feedback = useFeedback();
   const [filter, setFilter] = useState<Filter>('all');
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [badgesOpen, setBadgesOpen] = useState(false);
+
+  const unlockedBadges = badges.filter((b) => b.unlocked).sort((a, b) => (b.earnedAt ?? 0) - (a.earnedAt ?? 0));
+  // Closest locked badge that's already under way: a nudge for what to do next.
+  const nextBadge = badges
+    .filter((b) => !b.unlocked && b.value > 0)
+    .sort((a, b) => b.value / b.goal - a.value / a.goal)[0];
 
   const cards = cardsFor(state.posts, myId, state.customBeers);
   const openCard = cards.find((c) => c.beer.id === openCardId) ?? null;
@@ -68,20 +75,6 @@ export default function ProfileScreen() {
     0
   );
 
-  const badges = [
-    { emoji: '🍺', name: 'First Sip', earned: mine.length >= 1 },
-    { emoji: '📸', name: 'Shutterbug', earned: mine.some((p) => p.photo) },
-    { emoji: '🎨', name: 'Style Hopper', earned: new Set(beers.map((p) => p.style)).size >= 3 },
-    { emoji: '🃏', name: 'Collector', earned: cards.length >= 5 },
-    { emoji: '🥈', name: 'Silver Sipper', earned: cards.some((c) => c.tierIndex >= 1) },
-    { emoji: '🥇', name: 'Gold Standard', earned: cards.some((c) => c.tierIndex >= 2) },
-    { emoji: '💠', name: 'Platinum Pour', earned: cards.some((c) => c.tierIndex >= 3) },
-    { emoji: '👑', name: 'Legend', earned: cards.some((c) => c.tierIndex >= 4) },
-    ...state.challenges.map((c) => ({
-      ...c.badge,
-      earned: statusOf(c).done,
-    })),
-  ].sort((a, b) => Number(b.earned) - Number(a.earned));
 
   const filtered =
     filter === 'all'
@@ -166,18 +159,41 @@ export default function ProfileScreen() {
         <ThemedText type="overline" themeColor="textSecondary">
           Badges
         </ThemedText>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badges}>
-          {badges.map((b, i) => (
-            <Animated.View key={b.name} entering={ZoomIn.delay(i * 30).duration(180)}>
-              <Card style={[styles.badge, !b.earned && styles.locked]}>
-                <Text style={styles.badgeEmoji}>{b.earned ? b.emoji : '🔒'}</Text>
-                <ThemedText type="small" style={styles.center} numberOfLines={2} adjustsFontSizeToFit>
-                  {b.name}
-                </ThemedText>
-              </Card>
-            </Animated.View>
-          ))}
-        </ScrollView>
+        <Pressable
+          onPress={() => {
+            feedback.select();
+            setBadgesOpen(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`Badges, ${unlockedBadges.length} of ${badges.length} unlocked`}
+          style={({ pressed }) => pressed && styles.pressed}>
+          <Card style={styles.badgesCard}>
+            <View style={styles.badgeRow}>
+              {unlockedBadges.length ? (
+                unlockedBadges.slice(0, 5).map((b, i) => (
+                  <Animated.View key={b.id} entering={ZoomIn.delay(i * 40).duration(180)}>
+                    <Text style={styles.badgeEmoji}>{b.emoji}</Text>
+                  </Animated.View>
+                ))
+              ) : (
+                <Text style={[styles.badgeEmoji, styles.locked]}>🔒</Text>
+              )}
+              <View style={styles.flex} />
+              <ThemedText type="smallBold" themeColor="accentEnd">
+                See all ›
+              </ThemedText>
+            </View>
+            <ThemedText type="defaultSemiBold">
+              {unlockedBadges.length} of {badges.length} unlocked
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+              {nextBadge
+                ? `Next up: ${nextBadge.name} · ${nextBadge.value}/${nextBadge.goal}${nextBadge.unit ? ` ${nextBadge.unit}` : ''}`
+                : 'Post, react and go out with friends to unlock them'}
+            </ThemedText>
+          </Card>
+        </Pressable>
+        <BadgesPage visible={badgesOpen} onClose={() => setBadgesOpen(false)} />
 
         <ThemedText type="overline" themeColor="textSecondary">
           History
@@ -373,17 +389,14 @@ const styles = StyleSheet.create({
   center: {
     textAlign: 'center',
   },
-  badges: {
-    gap: Spacing.two,
+  badgesCard: {
+    gap: Spacing.one,
   },
-  badge: {
-    width: 100,
+  badgeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.one,
-    borderRadius: Radius.md,
-    shadowOpacity: 0,
+    marginBottom: Spacing.one,
   },
   badgeEmoji: {
     fontSize: 30,

@@ -1,14 +1,15 @@
-import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useAuth } from '@/auth/auth-provider';
 import * as api from '@/data/api';
+import { evaluateBadges, newlyUnlocked, type Badge } from '@/data/badges';
 import { type Beer } from '@/data/beers';
 import { cardsFor, tierOf } from '@/data/cards';
 import { challengeStatus, formatProgress } from '@/data/challenges';
 import { KIND_LABELS } from '@/data/seed';
-import type { AppState, Challenge, Group, LocationSharing, MyLocation, Post, Reaction, User } from '@/data/types';
+import type { AppState, Challenge, Group, GroupLeaderboard, LocationSharing, MyLocation, Post, Reaction, User } from '@/data/types';
 import { useFeedback } from '@/feedback/feedback';
 import type { CelebrationContent } from '@/feedback/celebration';
 import type { ToastContent } from '@/feedback/toast';
@@ -52,6 +53,8 @@ type Store = {
   friends: User[];
   incomingRequests: User[];
   outgoingRequests: User[];
+  /** The 30 profile badges with progress (src/data/badges.ts). */
+  badges: Badge[];
   /** True while the first load (with nothing cached) is in flight. */
   loading: boolean;
   /** Whether the profile is loaded, and whether the user still needs to pick a name. */
@@ -118,6 +121,15 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
   const groupsQ = useQuery({ queryKey: keys.groups(myId), queryFn: api.fetchGroups });
   const myLocQ = useQuery({ queryKey: keys.myLocation(myId), queryFn: () => api.fetchMyLocation(myId) });
 
+  // All-time group leaderboards feed the group badges (same cache entries the group cards use).
+  const groupBoards = useQueries({
+    queries: (groupsQ.data?.groups ?? []).map((g) => ({
+      queryKey: keys.groupBoard(g.id, 'all'),
+      queryFn: () => api.fetchGroupLeaderboard(g.id, 'all'),
+      staleTime: 60 * 1000,
+    })),
+  });
+
   const [deviceLocation, setDeviceLocation] = useState<MyLocation | undefined>();
   const [localAvatar, setLocalAvatar] = useState<string | undefined>();
   const [draftVenue, setDraftVenue] = useState<string | null>(null);
@@ -172,6 +184,23 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
     location: { sharing, me: location },
   };
   const feed = [...posts].sort((a, b) => b.createdAt - a.createdAt);
+
+  const boards = new Map<string, GroupLeaderboard>();
+  groups.forEach((g, i) => {
+    const board = groupBoards[i]?.data;
+    if (board) boards.set(g.id, board);
+  });
+  const badgesFor = (ps: Post[], beers: Beer[] = customBeers) =>
+    evaluateBadges({
+      myId,
+      posts: ps,
+      friendIds: state.friendIds,
+      customBeers: beers,
+      groups,
+      boards,
+      challengesDone: challenges.filter((c) => challengeStatus(c, ps, myId, userById).done).length,
+    });
+  const badges = badgesFor(posts);
 
   // ── Optimistic helpers ──
   const updatePosts = (fn: (posts: Post[]) => Post[]) =>
@@ -237,6 +266,9 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
       else if (card.xp > before.xp && card.beer.id !== post.beerId)
         lines.push({ emoji: '🃏', text: `${card.beer.name} card +½ level (same brewery)` });
       else if (card.xp > before.xp) lines.unshift({ emoji: '🃏', text: `${card.beer.name} card: halfway to Lv ${card.level + 1}` });
+    }
+    for (const b of newlyUnlocked(badges, badgesFor(next, allCustom))) {
+      lines.unshift({ emoji: b.emoji, text: `Badge unlocked: ${b.name}!`, highlight: true });
     }
 
     feedback.celebrate({
@@ -610,6 +642,7 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
         friends: friendships.friends,
         incomingRequests: friendships.incoming,
         outgoingRequests: friendships.outgoing,
+        badges,
         loading: postsQ.isPending && !postsQ.data,
         profileStatus: !profile ? 'loading' : profile.name ? 'ready' : 'needsOnboarding',
         addPost,
