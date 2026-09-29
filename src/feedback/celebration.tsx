@@ -21,7 +21,7 @@ export type CelebrationContent = {
   emoji: string;
   title: string;
   subtitle?: string;
-  /** Extra rows, e.g. challenge progress that this action moved forward. */
+  /** Extra rows, e.g. new cards and badges this action unlocked. */
   lines?: { emoji: string; text: string; highlight?: boolean }[];
   /** Beer card earned or upgraded by this action; shown instead of the emoji badge. */
   card?: BeerCard;
@@ -30,7 +30,7 @@ export type CelebrationContent = {
 const CONFETTI = ['🍺', '🍻', '✨', '🎉', '⭐️'];
 const PARTICLES = 20;
 const BURST_MS = 900;
-/** Auto-dismiss; a bit longer when there's challenge progress to read. */
+/** Auto-dismiss; a bit longer when there are extra lines to read. */
 const DURATION_MS = 1500;
 const DURATION_WITH_LINES_MS = 2300;
 

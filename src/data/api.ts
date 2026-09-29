@@ -2,8 +2,6 @@ import { File } from 'expo-file-system';
 
 import { BEER_CATALOG, type Beer } from '@/data/beers';
 import type {
-  Challenge,
-  ChallengeSummary,
   Group,
   GroupLeaderboard,
   GroupPeriod,
@@ -280,94 +278,6 @@ export async function addComment(id: string, postId: string, text: string) {
   fail(error);
 }
 
-// ───────────── Challenges ─────────────
-
-type ChallengeRow = {
-  id: string;
-  title: string;
-  description: string;
-  kind: Challenge['kind'];
-  goal: number;
-  starts_at: string;
-  ends_at: string;
-  badge_emoji: string;
-  badge_name: string;
-  participants: { user_id: string; status: 'invited' | 'joined'; invited_by: string | null; profile: ProfileRow }[];
-};
-
-export async function fetchChallenges(myId: string): Promise<{ challenges: Challenge[]; members: User[] }> {
-  const { data, error } = await supabase
-    .from('challenges')
-    .select(
-      `id, title, description, kind, goal, starts_at, ends_at, badge_emoji, badge_name,
-       participants:challenge_participants(user_id, status, invited_by, profile:profiles!challenge_participants_user_id_fkey(${PROFILE_COLUMNS}))`
-    )
-    .order('ends_at', { ascending: false });
-  fail(error);
-  const rows = (data ?? []) as unknown as ChallengeRow[];
-
-  const summaries = await Promise.all(
-    rows.map(async (r) => {
-      const { data: summary } = await supabase.rpc('challenge_summary', { p_challenge: r.id });
-      return summary as ChallengeSummary | null;
-    })
-  );
-
-  const members = new Map<string, User>();
-  const challenges = rows.map((r, i): Challenge => {
-    for (const p of r.participants) if (p.profile) members.set(p.user_id, toUser(p.profile));
-    const mine = r.participants.find((p) => p.user_id === myId);
-    return {
-      id: r.id,
-      title: r.title,
-      description: r.description,
-      kind: r.kind,
-      goal: r.goal,
-      startsAt: Date.parse(r.starts_at),
-      endsAt: Date.parse(r.ends_at),
-      participantIds: r.participants.filter((p) => p.status === 'joined').map((p) => p.user_id),
-      memberIds: r.participants.map((p) => p.user_id),
-      invitedBy: mine?.status === 'invited' ? (mine.invited_by ?? undefined) : undefined,
-      badge: { emoji: r.badge_emoji, name: r.badge_name },
-      summary: summaries[i] ?? undefined,
-    };
-  });
-  return { challenges, members: [...members.values()] };
-}
-
-export type ChallengeTemplate = {
-  id: string;
-  title: string;
-  description: string;
-  kind: Challenge['kind'];
-  goal: number;
-  days: number;
-  badge: { emoji: string; name: string };
-};
-
-export async function createChallenge(t: ChallengeTemplate, inviteeIds: string[]) {
-  const { data, error } = await supabase.rpc('create_challenge', {
-    p_title: t.title,
-    p_description: t.description,
-    p_kind: t.kind,
-    p_goal: t.goal,
-    p_days: t.days,
-    p_badge_emoji: t.badge.emoji,
-    p_badge_name: t.badge.name,
-    p_invitee_ids: inviteeIds,
-  });
-  fail(error);
-  return data as string;
-}
-
-export async function joinChallenge(myId: string, challengeId: string) {
-  const { error } = await supabase
-    .from('challenge_participants')
-    .update({ status: 'joined' })
-    .match({ challenge_id: challengeId, user_id: myId });
-  fail(error);
-}
-
 // ───────────── Groups ─────────────
 
 type GroupRow = {
@@ -429,6 +339,11 @@ export async function updateGroup(groupId: string, patch: Partial<Pick<GroupRow,
 
 export async function addGroupMembers(groupId: string, memberIds: string[]) {
   const { error } = await supabase.rpc('add_group_members', { p_group: groupId, p_member_ids: memberIds });
+  fail(error);
+}
+
+export async function removeGroupMember(groupId: string, userId: string) {
+  const { error } = await supabase.rpc('remove_group_member', { p_group: groupId, p_user: userId });
   fail(error);
 }
 

@@ -56,7 +56,7 @@ export function Tutorial() {
       points: [
         { emoji: '📸', text: 'Snap and rate what you’re drinking' },
         { emoji: '👀', text: 'See what your friends are up to' },
-        { emoji: '🏆', text: 'Compete in groups and challenges' },
+        { emoji: '🏆', text: 'Battle your crew on group leaderboards' },
       ],
     },
     {
@@ -106,12 +106,12 @@ export function Tutorial() {
     },
     {
       emoji: '🏆',
-      overline: 'Challenges tab',
-      title: 'Groups & challenges',
+      overline: 'Groups tab',
+      title: 'Your groups',
       body: 'Make a group with your crew, give it a name and a photo, and battle on the leaderboard.',
       points: [
         { emoji: '🥇', text: 'Rank by beers, posts, nights out, new beers and more' },
-        { emoji: '🏁', text: 'Start a challenge, invite friends, earn the badge' },
+        { emoji: '👀', text: 'Tap a group to see its members and stats' },
       ],
     },
     {

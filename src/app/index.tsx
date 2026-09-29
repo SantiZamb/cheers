@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -12,8 +13,8 @@ import { PostCard } from '@/components/post-card';
 import { Screen, ScreenHeader } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
-import { formatProgress, timeLeft } from '@/data/challenges';
-import { useChallengeStatus, useStore } from '@/data/store';
+import { fetchGroupLeaderboard } from '@/data/api';
+import { keys, useStore } from '@/data/store';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function FeedScreen() {
@@ -56,7 +57,7 @@ export default function FeedScreen() {
               }
             />
             <OutNow />
-            <ChallengeBanner />
+            <GroupBanner />
           </View>
         }
       />
@@ -132,21 +133,33 @@ function OutNow() {
   );
 }
 
-/** Nudges the user towards a pending invite or their closest-to-finishing challenge. */
-function ChallengeBanner() {
+/** Where you stand in your newest group this month, one tap from its page. */
+function GroupBanner() {
   const theme = useTheme();
-  const { state, userById } = useStore();
-  const statusOf = useChallengeStatus();
-  const candidates = state.challenges
-    .map((c) => ({ challenge: c, status: statusOf(c) }))
-    .filter(({ status }) => status.active && (!status.joined || !status.done));
-  const current = candidates.find(({ status }) => !status.joined) ?? candidates[0];
-  if (!current) return null;
-  const { challenge, status } = current;
+  const { state, myId } = useStore();
+  const group = state.groups[0];
+  const board = useQuery({
+    queryKey: keys.groupBoard(group?.id ?? '', 'month'),
+    queryFn: () => fetchGroupLeaderboard(group!.id, 'month'),
+    enabled: !!group,
+    staleTime: 30 * 1000,
+  });
+  if (!group) return null;
+
+  const standings = [...(board.data?.standings ?? [])].sort((a, b) => b.beers - a.beers);
+  const rank = standings.findIndex((s) => s.userId === myId);
+  const mine = standings[rank];
+  const line = !board.data
+    ? `${group.memberIds.length} members`
+    : !mine?.beers
+      ? 'No beers from you this month yet. Get on the board!'
+      : rank === 0
+        ? `You lead with ${mine.beers} ${mine.beers === 1 ? 'beer' : 'beers'} this month 👑`
+        : `You’re #${rank + 1} with ${mine.beers} ${mine.beers === 1 ? 'beer' : 'beers'} this month`;
 
   return (
     <Pressable
-      onPress={() => router.navigate('/challenges')}
+      onPress={() => router.navigate({ pathname: '/groups/[id]', params: { id: group.id } })}
       style={({ pressed }) => pressed && styles.pressed}
       accessibilityRole="button">
       <LinearGradient
@@ -154,19 +167,16 @@ function ChallengeBanner() {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.banner}>
-        <Text style={styles.bannerEmoji}>{challenge.badge.emoji}</Text>
+        <Avatar user={{ id: group.id, name: group.name, username: '', city: '', photo: group.photo }} size={40} />
         <View style={styles.flex}>
           <ThemedText type="overline" style={[styles.onAccent, { color: theme.onAccent }]}>
-            {status.joined
-              ? 'Your challenge'
-              : `${challenge.invitedBy ? userById(challenge.invitedBy).name + ' invited you' : 'New challenge'}`}
+            Your group
           </ThemedText>
-          <ThemedText type="defaultSemiBold" style={{ color: theme.onAccent }}>
-            {challenge.title}
+          <ThemedText type="defaultSemiBold" style={{ color: theme.onAccent }} numberOfLines={1}>
+            {group.name}
           </ThemedText>
-          <ThemedText type="small" style={[styles.onAccent, { color: theme.onAccent }]}>
-            {status.joined ? `${formatProgress(challenge, status)} · ` : 'Tap to join · '}
-            {timeLeft(challenge.endsAt)}
+          <ThemedText type="small" style={[styles.onAccent, { color: theme.onAccent }]} numberOfLines={1}>
+            {line}
           </ThemedText>
         </View>
         <ThemedText type="subtitle" style={{ color: theme.onAccent }}>
@@ -222,9 +232,6 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     borderRadius: Radius.lg,
-  },
-  bannerEmoji: {
-    fontSize: 32,
   },
   onAccent: {
     opacity: 0.85,

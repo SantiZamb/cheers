@@ -28,7 +28,11 @@ export default function RootLayout() {
     if (Platform.OS === 'web') return;
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const url = response.notification.request.content.data?.url;
-      if (url === '/' || url === '/challenges' || url === '/map') router.navigate(url);
+      if (typeof url !== 'string') return;
+      // '/challenges' comes from pushes sent before challenges were hidden and Groups got its tab.
+      if (url === '/challenges') router.navigate('/groups');
+      else if (url.startsWith('/groups/')) router.navigate({ pathname: '/groups/[id]', params: { id: url.slice('/groups/'.length) } });
+      else if (url === '/' || url === '/map' || url === '/groups') router.navigate(url);
     });
     return () => sub.remove();
   }, []);
@@ -49,10 +53,10 @@ export default function RootLayout() {
 
 /** Setup help → sign-in → onboarding → the app (with the intro tutorial on top, once). */
 function Gate() {
-  const { loading, userId } = useAuth();
+  const { loading, userId, recovering } = useAuth();
   if (!isSupabaseConfigured) return <SetupNeededScreen />;
   if (loading) return null;
-  if (!userId) return <SignInScreen />;
+  if (!userId || recovering) return <SignInScreen />;
   return (
     // Keyed by user so switching accounts starts from a clean store.
     <StoreProvider key={userId} myId={userId}>

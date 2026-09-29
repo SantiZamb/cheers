@@ -7,9 +7,8 @@ import * as api from '@/data/api';
 import { evaluateBadges, newlyUnlocked, type Badge } from '@/data/badges';
 import { type Beer } from '@/data/beers';
 import { cardsFor, tierOf } from '@/data/cards';
-import { challengeStatus, formatProgress } from '@/data/challenges';
 import { KIND_LABELS } from '@/data/seed';
-import type { AppState, Challenge, Group, GroupLeaderboard, LocationSharing, MyLocation, Post, Reaction, User } from '@/data/types';
+import type { AppState, Group, GroupLeaderboard, LocationSharing, MyLocation, Post, Reaction, User } from '@/data/types';
 import { useFeedback } from '@/feedback/feedback';
 import type { CelebrationContent } from '@/feedback/celebration';
 import type { ToastContent } from '@/feedback/toast';
@@ -35,7 +34,6 @@ export const keys = {
   friends: (uid: string) => ['friends', uid] as const,
   posts: (uid: string) => ['posts', uid] as const,
   beers: () => ['beers'] as const,
-  challenges: (uid: string) => ['challenges', uid] as const,
   groups: (uid: string) => ['groups', uid] as const,
   /** Prefix of every group leaderboard query (they're keyed by group and period). */
   groupBoard: (groupId: string, period: string) => ['groupBoard', groupId, period] as const,
@@ -48,7 +46,7 @@ type Store = {
   state: AppState;
   /** Posts from the user and their friends, newest first. */
   feed: Post[];
-  /** Anyone the app knows about (you, friends, requests, comment authors, challenge members). */
+  /** Anyone the app knows about (you, friends, requests, comment authors, group members). */
   userById: (id: string) => User;
   friends: User[];
   incomingRequests: User[];
@@ -67,13 +65,12 @@ type Store = {
   sendFriendRequest: (user: User) => void;
   acceptFriend: (user: User) => void;
   removeFriend: (user: User) => void;
-  joinChallenge: (challengeId: string) => void;
-  startChallenge: (template: api.ChallengeTemplate, inviteeIds: string[]) => Promise<void>;
-  /** Resolves true once the group exists on the server. */
-  createGroup: (input: { name: string; memberIds: string[]; photo?: string }) => Promise<boolean>;
+  /** Resolves with the new group's id once it exists on the server (null if it failed). */
+  createGroup: (input: { name: string; memberIds: string[]; photo?: string }) => Promise<string | null>;
   renameGroup: (groupId: string, name: string) => void;
   setGroupPhoto: (groupId: string, uri: string) => void;
   addGroupMembers: (groupId: string, memberIds: string[]) => void;
+  removeGroupMember: (groupId: string, userId: string) => void;
   leaveGroup: (groupId: string) => void;
   /** The intro tutorial: shown once after sign-up, and again on request from Profile. */
   tutorialOpen: boolean;
@@ -105,7 +102,6 @@ export function postHeadline(post: Post) {
 const UNKNOWN_USER: Omit<User, 'id'> = { name: 'Someone', username: '', city: '' };
 
 type PostsData = Awaited<ReturnType<typeof api.fetchPosts>>;
-type ChallengesData = Awaited<ReturnType<typeof api.fetchChallenges>>;
 type GroupsData = Awaited<ReturnType<typeof api.fetchGroups>>;
 
 export function StoreProvider({ myId, children }: { myId: string; children: ReactNode }) {
@@ -117,7 +113,6 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
   const friendsQ = useQuery({ queryKey: keys.friends(myId), queryFn: () => api.fetchFriendships(myId) });
   const postsQ = useQuery({ queryKey: keys.posts(myId), queryFn: api.fetchPosts });
   const beersQ = useQuery({ queryKey: keys.beers(), queryFn: api.fetchBeers, staleTime: 60 * 60 * 1000 });
-  const challengesQ = useQuery({ queryKey: keys.challenges(myId), queryFn: () => api.fetchChallenges(myId) });
   const groupsQ = useQuery({ queryKey: keys.groups(myId), queryFn: api.fetchGroups });
   const myLocQ = useQuery({ queryKey: keys.myLocation(myId), queryFn: () => api.fetchMyLocation(myId) });
 
@@ -139,7 +134,6 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
   // ── Assemble what screens read ──
   const friendships = friendsQ.data ?? { friends: [], incoming: [], outgoing: [] };
   const posts = postsQ.data?.posts ?? [];
-  const challenges = challengesQ.data?.challenges ?? [];
   const groups = groupsQ.data?.groups ?? [];
   const customBeers = (beersQ.data ?? []).filter((b) => b.id.startsWith('custom-'));
   const myLoc = myLocQ.data;
@@ -160,7 +154,6 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
   const myCity = location?.city ?? profile?.city ?? '';
 
   const users = new Map<string, User>();
-  for (const u of challengesQ.data?.members ?? []) users.set(u.id, u);
   for (const u of groupsQ.data?.members ?? []) users.set(u.id, u);
   for (const u of postsQ.data?.commentAuthors ?? []) users.set(u.id, u);
   for (const u of [...friendships.incoming, ...friendships.outgoing, ...friendships.friends]) users.set(u.id, u);
@@ -177,7 +170,6 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
   const state: AppState = {
     posts,
     friendIds: friendships.friends.map((f) => f.id),
-    challenges,
     groups,
     profilePhoto: me.photo,
     customBeers,
@@ -198,7 +190,6 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
       customBeers: beers,
       groups,
       boards,
-      challengesDone: challenges.filter((c) => challengeStatus(c, ps, myId, userById).done).length,
     });
   const badges = badgesFor(posts);
 
@@ -240,18 +231,8 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
     };
     const next = [post, ...posts];
 
-    // Celebrate immediately from local data: challenge progress, new cards, level-ups.
+    // Celebrate immediately from local data: new cards, level-ups, badges.
     const lines: NonNullable<CelebrationContent['lines']> = [];
-    for (const ch of challenges) {
-      const before = challengeStatus(ch, posts, myId, userById);
-      if (!before.active || !before.joined) continue;
-      const after = challengeStatus(ch, next, myId, userById);
-      if (after.done && !before.done) {
-        lines.push({ emoji: ch.badge.emoji, text: `Challenge complete: ${ch.title}! Badge unlocked`, highlight: true });
-      } else if (after.myValue !== before.myValue) {
-        lines.push({ emoji: '🏁', text: `${ch.title}: ${formatProgress(ch, after)}` });
-      }
-    }
     const isNewCustom = !!beer && beer.id.startsWith('custom-') && !customBeers.some((b) => b.id === beer.id);
     const allCustom = isNewCustom ? [...customBeers, beer] : customBeers;
     const cardsBefore = cardsFor(posts, myId, customBeers);
@@ -270,6 +251,9 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
     for (const b of newlyUnlocked(badges, badgesFor(next, allCustom))) {
       lines.unshift({ emoji: b.emoji, text: `Badge unlocked: ${b.name}!`, highlight: true });
     }
+    if (groups.length) {
+      lines.push({ emoji: '👯', text: `Counts toward ${groups.length === 1 ? groups[0].name : `your ${groups.length} groups`}` });
+    }
 
     feedback.celebrate({
       card: mainCard,
@@ -286,7 +270,7 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
       async () => {
         if (isNewCustom) await api.ensureCustomBeer(myId, beer);
         await api.createPost(post, photo);
-        qc.invalidateQueries({ queryKey: keys.challenges(myId) });
+        qc.invalidateQueries({ queryKey: ['groupBoard'] });
       },
       'Couldn’t share your post'
     );
@@ -368,45 +352,6 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
     );
   };
 
-  const joinChallenge = (challengeId: string) => {
-    const challenge = challenges.find((c) => c.id === challengeId);
-    if (!challenge) return;
-    feedback.celebrate({
-      emoji: '🏁',
-      title: 'You’re in!',
-      subtitle: challenge.title,
-      lines: [{ emoji: challenge.badge.emoji, text: `Finish it to earn “${challenge.badge.name}”` }],
-    });
-    optimistic(
-      keys.challenges(myId),
-      () =>
-        qc.setQueryData<ChallengesData>(keys.challenges(myId), (old) =>
-          old && {
-            ...old,
-            challenges: old.challenges.map((c) =>
-              c.id === challengeId ? { ...c, participantIds: [...c.participantIds, myId], invitedBy: undefined } : c
-            ),
-          }
-        ),
-      () => api.joinChallenge(myId, challengeId),
-      'Couldn’t join the challenge'
-    );
-  };
-
-  const startChallenge = async (template: api.ChallengeTemplate, inviteeIds: string[]) => {
-    try {
-      await api.createChallenge(template, inviteeIds);
-      await qc.invalidateQueries({ queryKey: keys.challenges(myId) });
-      feedback.celebrate({
-        emoji: template.badge.emoji,
-        title: 'Challenge on!',
-        subtitle: `${template.title} · ${inviteeIds.length} ${inviteeIds.length === 1 ? 'friend' : 'friends'} invited`,
-      });
-    } catch (e) {
-      feedback.toast({ emoji: '⚠️', title: 'Couldn’t start the challenge', body: e instanceof Error ? e.message : undefined });
-    }
-  };
-
   const updateGroups = (fn: (groups: Group[]) => Group[]) =>
     qc.setQueryData<GroupsData>(keys.groups(myId), (old) => ({ groups: fn(old?.groups ?? []), members: old?.members ?? [] }));
   const patchGroup = (groupId: string, patch: Partial<Group>) =>
@@ -414,7 +359,7 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
 
   const createGroup = async ({ name, memberIds, photo }: { name: string; memberIds: string[]; photo?: string }) => {
     try {
-      await api.createGroup(myId, name, memberIds, photo);
+      const id = await api.createGroup(myId, name, memberIds, photo);
       await qc.invalidateQueries({ queryKey: keys.groups(myId) });
       feedback.celebrate({
         emoji: '👯',
@@ -422,10 +367,10 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
         subtitle: `${name} · ${memberIds.length + 1} ${memberIds.length ? 'people' : 'person'}`,
         lines: [{ emoji: '🏆', text: 'Post beers to climb the group leaderboard' }],
       });
-      return true;
+      return id;
     } catch (e) {
       feedback.toast({ emoji: '⚠️', title: 'Couldn’t create the group', body: e instanceof Error ? e.message : undefined });
-      return false;
+      return null;
     }
   };
 
@@ -461,6 +406,19 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
         qc.invalidateQueries({ queryKey: ['groupBoard', groupId] });
       },
       'Couldn’t add to the group'
+    );
+  };
+
+  const removeGroupMember = (groupId: string, userId: string) => {
+    optimistic(
+      keys.groups(myId),
+      () =>
+        updateGroups((gs) => gs.map((g) => (g.id === groupId ? { ...g, memberIds: g.memberIds.filter((id) => id !== userId) } : g))),
+      async () => {
+        await api.removeGroupMember(groupId, userId);
+        qc.invalidateQueries({ queryKey: ['groupBoard', groupId] });
+      },
+      'Couldn’t remove them from the group'
     );
   };
 
@@ -535,7 +493,7 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
 
   const refresh = async () => {
     await Promise.all(
-      [keys.posts(myId), keys.friends(myId), keys.challenges(myId), keys.groups(myId), ['groupBoard'], keys.profile(myId)].map((queryKey) =>
+      [keys.posts(myId), keys.friends(myId), keys.groups(myId), ['groupBoard'], keys.profile(myId)].map((queryKey) =>
         qc.invalidateQueries({ queryKey })
       )
     );
@@ -586,7 +544,7 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
-        invalidateSoon('posts', 'challenges', 'groupBoard');
+        invalidateSoon('posts', 'groupBoard');
         const row = payload.new as { user_id: string; kind: Post['kind'] };
         if (row.user_id !== myId) {
           const user = person(row.user_id);
@@ -607,20 +565,13 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
           toast({ emoji: '🍻', title: 'Friend request accepted', body: 'Their nights now show in your feed' });
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_participants' }, (payload) => {
-        invalidateSoon('challenges');
-        const row = payload.new as { user_id?: string; status?: string };
-        if (payload.eventType === 'INSERT' && row.user_id === myId && row.status === 'invited') {
-          toast({ emoji: '🏁', title: 'You’ve been invited to a challenge', body: 'Open Challenges to join' });
-        }
-      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => invalidateSoon('groups'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, (payload) => {
         invalidateSoon('groups', 'groupBoard');
         const row = payload.new as { user_id?: string; added_by?: string };
         if (payload.eventType === 'INSERT' && row.user_id === myId && row.added_by && row.added_by !== myId) {
           const user = person(row.added_by);
-          toast({ user, emoji: '👯', title: `${user.name} added you to a group`, body: 'Open Challenges to see the leaderboard' });
+          toast({ user, emoji: '👯', title: `${user.name} added you to a group`, body: 'Open Groups to see the leaderboard' });
         }
       })
       .subscribe();
@@ -653,12 +604,11 @@ export function StoreProvider({ myId, children }: { myId: string; children: Reac
         sendFriendRequest,
         acceptFriend,
         removeFriend,
-        joinChallenge,
-        startChallenge,
         createGroup,
         renameGroup,
         setGroupPhoto,
         addGroupMembers,
+        removeGroupMember,
         leaveGroup,
         tutorialOpen: tutorialReplay || (!!profile?.name && profile.tutorial_seen === false),
         openTutorial: () => setTutorialReplay(true),
@@ -682,12 +632,6 @@ export function useStore() {
   const value = useContext(StoreContext);
   if (!value) throw new Error('useStore must be used inside StoreProvider');
   return value;
-}
-
-/** Challenge status for the signed-in user (wraps challengeStatus with the store's context). */
-export function useChallengeStatus() {
-  const { state, myId, userById } = useStore();
-  return (challenge: Challenge) => challengeStatus(challenge, state.posts, myId, userById);
 }
 
 export function timeAgo(timestamp: number) {

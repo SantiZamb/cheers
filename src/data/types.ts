@@ -64,41 +64,6 @@ export type Post = {
   comments: Comment[];
 };
 
-/**
- * How progress on a challenge is measured, always over posts inside [startsAt, endsAt):
- * - newBeers: distinct beers rated by each participant
- * - nights: night-out posts by each participant
- * - topRated: each participant's highest beer rating (goal = rate at least one beer)
- * - cities: distinct cities posted from by the whole group together
- */
-export type ChallengeKind = 'newBeers' | 'nights' | 'topRated' | 'cities';
-
-export type Challenge = {
-  id: string;
-  title: string;
-  description: string;
-  kind: ChallengeKind;
-  goal: number;
-  startsAt: number;
-  endsAt: number;
-  /** Users who joined. */
-  participantIds: string[];
-  /** Everyone invited or joined (for showing who's in). */
-  memberIds: string[];
-  /** Set when a friend invited the current user and they haven't joined yet. */
-  invitedBy?: string;
-  badge: { emoji: string; name: string };
-  /** Server-computed leaderboard and totals (covers participants who aren't your friends). */
-  summary?: ChallengeSummary;
-};
-
-export type ChallengeSummary = {
-  standings: { userId: string; value: number; detail?: string | null; posts: number }[];
-  groupCities: string[];
-  posts: number;
-  beers: number;
-};
-
 /** A named crew of friends with a photo and its own leaderboard. */
 export type Group = {
   id: string;
@@ -126,7 +91,6 @@ export type GroupLeaderboard = {
 export type AppState = {
   posts: Post[];
   friendIds: string[];
-  challenges: Challenge[];
   groups: Group[];
   /** The user's own profile photo (local file URI). */
   profilePhoto?: string;

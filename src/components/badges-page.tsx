@@ -8,14 +8,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { DIFFICULTIES, type Badge, type BadgeDifficulty } from '@/data/badges';
-import { useChallengeStatus, useStore } from '@/data/store';
+import { useStore } from '@/data/store';
 import { useFeedback } from '@/feedback/feedback';
 import { useTheme } from '@/hooks/use-theme';
 
 type Filter = 'all' | 'unlocked' | 'locked';
-
-/** Badges you get for finishing challenges, shown after the 30 regular ones. */
-type ChallengeBadge = { id: string; emoji: string; name: string; challenge: string; endsAt: number };
 
 const difficultyOf = (id: BadgeDifficulty) => DIFFICULTIES.find((d) => d.id === id)!;
 
@@ -26,17 +23,12 @@ const formatDate = (t: number) =>
 export function BadgesPage({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const theme = useTheme();
   const feedback = useFeedback();
-  const { badges, state } = useStore();
-  const statusOf = useChallengeStatus();
+  const { badges } = useStore();
   const [filter, setFilter] = useState<Filter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
 
   const unlocked = badges.filter((b) => b.unlocked).length;
   const open = badges.find((b) => b.id === openId) ?? null;
-  const challengeBadges: ChallengeBadge[] = state.challenges
-    .filter((c) => statusOf(c).done)
-    .map((c) => ({ id: c.id, ...c.badge, challenge: c.title, endsAt: c.endsAt }));
-  const openChallenge = challengeBadges.find((b) => b.id === openId) ?? null;
 
   const shown = (b: Badge) => filter === 'all' || (filter === 'unlocked') === b.unlocked;
 
@@ -110,31 +102,14 @@ export function BadgesPage({ visible, onClose }: { visible: boolean; onClose: ()
             );
           })}
 
-          {challengeBadges.length > 0 && filter !== 'locked' && (
-            <View style={styles.section}>
-              <ThemedText type="overline" themeColor="textSecondary">
-                Challenge badges
-              </ThemedText>
-              <View style={styles.grid}>
-                {challengeBadges.map((b) => (
-                  <Pressable key={b.id} onPress={() => select(b.id)} style={styles.tile} accessibilityRole="button">
-                    <Medal emoji={b.emoji} colors={[theme.accent, theme.accentEnd]} />
-                    <ThemedText type="small" style={styles.tileName} numberOfLines={2}>
-                      {b.name}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          )}
         </ScrollView>
 
-        {(open || openChallenge) && (
+        {open && (
           <Pressable style={styles.backdrop} onPress={() => setOpenId(null)} accessibilityLabel="Close badge">
             <Animated.View
               entering={ZoomIn.duration(220).easing(Easing.out(Easing.back(1.4)))}
               style={[styles.detail, { backgroundColor: theme.backgroundElement }]}>
-              {open ? <BadgeDetail badge={open} /> : openChallenge ? <ChallengeBadgeDetail badge={openChallenge} /> : null}
+              <BadgeDetail badge={open} />
             </Animated.View>
           </Pressable>
         )}
@@ -259,24 +234,6 @@ function BadgeDetail({ badge }: { badge: Badge }) {
           ) : null}
         </Animated.View>
       )}
-    </>
-  );
-}
-
-function ChallengeBadgeDetail({ badge }: { badge: ChallengeBadge }) {
-  const theme = useTheme();
-  return (
-    <>
-      <Medal emoji={badge.emoji} colors={[theme.accent, theme.accentEnd]} size={112} />
-      <ThemedText type="subtitle" style={styles.center}>
-        {badge.name}
-      </ThemedText>
-      <View style={styles.detailText}>
-        <ThemedText type="overline" themeColor="accentEnd" style={styles.center}>
-          Challenge badge
-        </ThemedText>
-        <ThemedText style={styles.center}>Completed “{badge.challenge}”.</ThemedText>
-      </View>
     </>
   );
 }

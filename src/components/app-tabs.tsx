@@ -34,9 +34,10 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="challenges">
-        <NativeTabs.Trigger.Label>Challenges</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'flag', selected: 'flag.fill' }} md="flag" />
+      {/* A stack inside the tab: the group list pushes group pages (src/app/groups/). */}
+      <NativeTabs.Trigger name="groups">
+        <NativeTabs.Trigger.Label>Groups</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.3', selected: 'person.3.fill' }} md="groups" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="profile">

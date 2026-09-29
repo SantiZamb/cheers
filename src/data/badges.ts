@@ -4,8 +4,7 @@ import type { Group, GroupLeaderboard, Post } from '@/data/types';
 
 /**
  * The 30 profile badges. Everything is derived on the device from data the app already has
- * (posts you and your friends can see, friends, groups and their all-time leaderboards, finished
- * challenges), so there's nothing to store and badges can never get out of sync.
+ * (posts you and your friends can see, friends, groups and their all-time leaderboards), so there's nothing to store and badges can never get out of sync.
  *
  * Each badge reports progress (`value` of `goal`); it's earned once value ≥ goal. `earnedAt` is
  * when the goal was reached, when that can be worked out from post times.
@@ -29,7 +28,6 @@ export type BadgeContext = {
   groups: Group[];
   /** All-time leaderboard per group id (missing while loading). */
   boards: Map<string, GroupLeaderboard>;
-  challengesDone: number;
 };
 
 type Progress = { value: number; goal: number; earnedAt?: number; detail?: string };
@@ -161,12 +159,12 @@ function derive(ctx: BadgeContext) {
   }
   const bestWeekend = Math.max(0, ...[...weekendDays.values()].map((s) => s.size));
 
-  /** Groups (3+ people) where you're strictly ahead of everyone on `metric`, with at least `min`. */
-  const groupLead = (metric: 'nights' | 'beers', min: number): Progress => {
+  /** Groups (`size`+ people) where you're strictly ahead of everyone on `metric`, with at least `min`. */
+  const groupLead = (metric: 'nights' | 'beers', min: number, size = MIN_GROUP_SIZE): Progress => {
     let best: { value: number; group: string; ahead: boolean } | undefined;
     for (const g of ctx.groups) {
       const board = ctx.boards.get(g.id);
-      if (!board || board.standings.length < MIN_GROUP_SIZE) continue;
+      if (!board || board.standings.length < size) continue;
       const me = board.standings.find((s) => s.userId === myId);
       if (!me) continue;
       const others = Math.max(0, ...board.standings.filter((s) => s.userId !== myId).map((s) => s[metric]));
@@ -174,7 +172,7 @@ function derive(ctx: BadgeContext) {
       if (!best || (ahead && !best.ahead) || (ahead === best.ahead && me[metric] > best.value))
         best = { value: me[metric], group: g.name, ahead };
     }
-    if (!best) return atLeast(0, 1, `Needs a group of ${MIN_GROUP_SIZE}+ people`);
+    if (!best) return atLeast(0, 1, `Needs a group of ${size}+ people`);
     return atLeast(best.ahead ? 1 : 0, 1, best.ahead ? `In ${best.group}` : `Best so far: ${best.value} in ${best.group}`);
   };
 
@@ -373,13 +371,14 @@ export const BADGES: BadgeDef[] = [
     progress: (d) => countUp(d.beers, 5, (p) => (p.rating ? String(p.rating) : undefined)),
   },
   {
-    id: 'challenger',
-    emoji: '🏁',
-    name: 'Challenger',
+    id: 'social-butterfly',
+    emoji: '🦋',
+    name: 'Social Butterfly',
     difficulty: 'rare',
-    howTo: 'Complete a challenge.',
-    earned: 'Completed a challenge.',
-    progress: (d) => atLeast(d.ctx.challengesDone, 1),
+    howTo: 'Have 10 friends on Cheers.',
+    earned: 'Built a crew of 10+ friends.',
+    unit: 'friends',
+    progress: (d) => atLeast(d.ctx.friendIds.length, 10),
   },
 
   // Epic: weeks of going out, or beating your friends.
@@ -499,14 +498,13 @@ export const BADGES: BadgeDef[] = [
     progress: (d) => countUp(d.beers, 50, (p) => p.beerId),
   },
   {
-    id: 'challenge-champion',
-    emoji: '🎖️',
-    name: 'Challenge Champion',
+    id: 'goat',
+    emoji: '🐐',
+    name: 'The GOAT',
     difficulty: 'legendary',
-    howTo: 'Complete 5 challenges.',
-    earned: 'Completed 5 challenges.',
-    unit: 'challenges',
-    progress: (d) => atLeast(d.ctx.challengesDone, 5),
+    howTo: 'Drink more beers than anyone else in a group of 5+ people, with at least 50 (all time).',
+    earned: 'Top beer drinker in a group of 5+.',
+    progress: (d) => d.groupLead('beers', 50, 5),
   },
 ];
 

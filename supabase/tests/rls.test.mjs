@@ -150,6 +150,12 @@ check('leaderboard: period filter', (await rows(A, `select group_leaderboard($1,
 await expectError('non-member cannot read the leaderboard', () => as(C, `select group_leaderboard($1)`, [groupId]));
 await as(B, `delete from group_members where group_id = $1 and user_id = $2`, [groupId, A]);
 check('cannot remove someone else', (await rows(A, `select * from group_members`)).length === 2);
+await expectError('non-creator cannot remove the creator', () => as(B, `select remove_group_member($1, $2)`, [groupId, A]));
+await expectError('non-member cannot remove anyone', () => as(C, `select remove_group_member($1, $2)`, [groupId, B]));
+await as(A, `select remove_group_member($1, $2)`, [groupId, B]);
+check('creator can remove a member', (await rows(A, `select * from group_members`)).length === 1);
+check('group add push opens the group', (await db.query(`select body->'data'->>'url' as url from net.log where body->>'title' like '%added you to a group'`)).rows.every((r) => r.url === '/groups/' + groupId));
+await as(A, `select add_group_members($1, $2)`, [groupId, [B]]);
 await as(B, `delete from group_members where user_id = $1`, [B]);
 check('members can leave', (await rows(A, `select * from group_members`)).length === 1);
 await as(A, `delete from group_members where user_id = $1`, [A]);
@@ -171,7 +177,7 @@ check('non-friend cannot', (await rows(C, `select name from storage.objects wher
 // Pushes
 const pushes = (await db.query(`select body->>'to' as to, body->>'title' as title from net.log`)).rows;
 console.log('  pushes sent:', pushes.map((p) => `${p.to.match(/\[(\w+)\]/)[1]}: ${p.title}`).join(' | '));
-check('pushes for request, accept, reactions, comment, invite, group add, friend posts', pushes.length === 10, `${pushes.length}`);
+check('pushes for request, accept, reactions, comment, invite, group adds, friend posts', pushes.length === 11, `${pushes.length}`);
 check('nobody is pushed about their own action', !pushes.some((p) => p.title.startsWith('Alice') && p.to.includes('alice')));
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll checks passed');

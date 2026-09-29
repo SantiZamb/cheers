@@ -17,7 +17,7 @@ type Feedback = {
   pop: () => void;
   /** A friend did something: banner + pop + impact. */
   toast: (content: ToastContent) => void;
-  /** Big moment (posting, finishing a challenge): confetti + chime + success haptic. */
+  /** Big moment (posting, creating a group): confetti + chime + success haptic. */
   celebrate: (content: CelebrationContent) => void;
 };
 
