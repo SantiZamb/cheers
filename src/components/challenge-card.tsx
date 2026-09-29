@@ -10,20 +10,18 @@ import { GradientButton } from '@/components/gradient-button';
 import { Radius, Spacing } from '@/constants/theme';
 import {
   challengeRecap,
-  challengeStatus,
   formatProgress,
   timeLeft,
   type ChallengeStatus,
 } from '@/data/challenges';
-import { ME_ID, USERS } from '@/data/seed';
-import { useStore } from '@/data/store';
+import { useChallengeStatus, useStore } from '@/data/store';
 import type { Challenge } from '@/data/types';
 import { useTheme } from '@/hooks/use-theme';
 
 export function ChallengeCard({ challenge }: { challenge: Challenge }) {
   const theme = useTheme();
-  const { state, joinChallenge } = useStore();
-  const status = challengeStatus(challenge, state.posts);
+  const { joinChallenge, userById } = useStore();
+  const status = useChallengeStatus()(challenge);
   const [open, setOpen] = useState(false);
 
   const fraction =
@@ -48,7 +46,7 @@ export function ChallengeCard({ challenge }: { challenge: Challenge }) {
           <View style={[styles.invite, { backgroundColor: theme.accentSoft }]}>
             <ThemedText type="small" style={styles.flex}>
               {challenge.invitedBy
-                ? `${USERS[challenge.invitedBy].name} invited you`
+                ? `${userById(challenge.invitedBy).name} invited you`
                 : 'Open to join'}
               {' · '}
               {timeLeft(challenge.endsAt)}
@@ -97,6 +95,7 @@ function progressLabel(challenge: Challenge, status: ChallengeStatus) {
 
 function Leaderboard({ challenge, status }: { challenge: Challenge; status: ChallengeStatus }) {
   const theme = useTheme();
+  const { myId } = useStore();
   return (
     <View style={styles.gap}>
       {status.standings.map((s, i) => {
@@ -108,7 +107,7 @@ function Leaderboard({ challenge, status }: { challenge: Challenge; status: Chal
             : challenge.kind === 'cities'
               ? `${s.value} ${s.value === 1 ? 'city' : 'cities'}`
               : `${s.value}/${challenge.goal}`;
-        const isMe = s.user.id === ME_ID;
+        const isMe = s.user.id === myId;
         return (
           <View
             key={s.user.id}
@@ -132,8 +131,8 @@ function Leaderboard({ challenge, status }: { challenge: Challenge; status: Chal
 
 function Recap({ challenge }: { challenge: Challenge }) {
   const theme = useTheme();
-  const { state } = useStore();
-  const recap = challengeRecap(challenge, state.posts);
+  const { state, myId, userById } = useStore();
+  const recap = challengeRecap(challenge, state.posts, myId, userById);
 
   return (
     <View style={[styles.recap, { backgroundColor: theme.accentSoft }]}>

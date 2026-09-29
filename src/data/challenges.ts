@@ -1,4 +1,3 @@
-import { ME_ID, USERS } from '@/data/seed';
 import type { Challenge, Post, User } from '@/data/types';
 
 export type Standing = { user: User; value: number; detail?: string };
@@ -23,76 +22,78 @@ export type ChallengeRecap = {
   earnedBadge: boolean;
 };
 
-function postsInWindow(challenge: Challenge, posts: Post[]) {
-  return posts.filter(
-    (p) =>
-      p.createdAt >= challenge.startsAt &&
-      p.createdAt < challenge.endsAt &&
-      challenge.participantIds.includes(p.userId)
-  );
+function inWindow(challenge: Challenge, p: Post) {
+  return p.createdAt >= challenge.startsAt && p.createdAt < challenge.endsAt;
 }
 
-function valueFor(challenge: Challenge, posts: Post[], userId: string): Standing {
-  const mine = posts.filter((p) => p.userId === userId);
-  const user = USERS[userId];
+/** The user's own value, from their local posts so it updates the instant they post. */
+function valueFor(challenge: Challenge, posts: Post[], userId: string): { value: number; detail?: string } {
+  const mine = posts.filter((p) => p.userId === userId && inWindow(challenge, p));
   switch (challenge.kind) {
-    case 'newBeers': {
-      const beers = new Set(
-        mine.filter((p) => p.kind === 'beer' && p.beer).map((p) => p.beer!.toLowerCase())
-      );
-      return { user, value: beers.size };
-    }
+    case 'newBeers':
+      return { value: new Set(mine.filter((p) => p.kind === 'beer' && p.beerId).map((p) => p.beerId)).size };
     case 'nights':
-      return { user, value: mine.filter((p) => p.kind === 'night').length };
+      return { value: mine.filter((p) => p.kind === 'night').length };
     case 'topRated': {
-      const best = mine
-        .filter((p) => p.kind === 'beer' && p.rating)
-        .sort((a, b) => b.rating! - a.rating!)[0];
-      return { user, value: best?.rating ?? 0, detail: best?.beer };
+      const best = mine.filter((p) => p.kind === 'beer' && p.rating).sort((a, b) => b.rating! - a.rating!)[0];
+      return { value: best?.rating ?? 0, detail: best?.beer };
     }
     case 'cities':
-      return { user, value: new Set(mine.map((p) => p.city)).size };
+      return { value: new Set(mine.map((p) => p.city).filter(Boolean)).size };
   }
 }
 
-export function challengeStatus(challenge: Challenge, allPosts: Post[], now = Date.now()) {
-  const posts = postsInWindow(challenge, allPosts);
-  const standings = challenge.participantIds
-    .map((id) => valueFor(challenge, posts, id))
-    .sort((a, b) => b.value - a.value);
+/**
+ * Standings come from the server summary (it can see participants who aren't your friends);
+ * your own row and the group total are recomputed from local posts so progress feels instant.
+ */
+export function challengeStatus(
+  challenge: Challenge,
+  posts: Post[],
+  myId: string,
+  userById: (id: string) => User,
+  now = Date.now()
+): ChallengeStatus {
+  const joined = challenge.participantIds.includes(myId);
+  const mine = valueFor(challenge, posts, myId);
+  const server = challenge.summary?.standings ?? [];
+
+  const standings: Standing[] = challenge.participantIds.map((id) => {
+    if (id === myId) return { user: userById(id), value: mine.value, detail: mine.detail };
+    const row = server.find((s) => s.userId === id);
+    return { user: userById(id), value: row?.value ?? 0, detail: row?.detail ?? undefined };
+  });
+  standings.sort((a, b) => b.value - a.value);
+
   const isGroup = challenge.kind === 'cities';
-  const joined = challenge.participantIds.includes(ME_ID);
-  const myValue = isGroup
-    ? new Set(posts.map((p) => p.city)).size
-    : (standings.find((s) => s.user.id === ME_ID)?.value ?? 0);
+  const groupCities = new Set([
+    ...(challenge.summary?.groupCities ?? []),
+    ...posts.filter((p) => p.userId === myId && inWindow(challenge, p) && p.city).map((p) => p.city),
+  ]);
+  const myValue = isGroup ? groupCities.size : mine.value;
   const done = joined && (challenge.kind === 'topRated' ? myValue > 0 : myValue >= challenge.goal);
 
-  const status: ChallengeStatus = {
-    active: now < challenge.endsAt,
-    joined,
-    myValue,
-    done,
-    isGroup,
-    standings,
-  };
-  return status;
+  return { active: now < challenge.endsAt, joined, myValue, done, isGroup, standings };
 }
 
-export function challengeRecap(challenge: Challenge, allPosts: Post[]): ChallengeRecap {
-  const posts = postsInWindow(challenge, allPosts);
-  const status = challengeStatus(challenge, allPosts, challenge.endsAt);
-  const counts = new Map<string, number>();
-  posts.forEach((p) => counts.set(p.userId, (counts.get(p.userId) ?? 0) + 1));
-  const mvpId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+export function challengeRecap(
+  challenge: Challenge,
+  posts: Post[],
+  myId: string,
+  userById: (id: string) => User
+): ChallengeRecap {
+  const status = challengeStatus(challenge, posts, myId, userById, challenge.endsAt);
+  const summary = challenge.summary;
+  const mvpRow = [...(summary?.standings ?? [])].sort((a, b) => b.posts - a.posts)[0];
   const finishers = status.standings
     .filter((s) => (challenge.kind === 'topRated' ? s.value > 0 : s.value >= challenge.goal))
     .map((s) => s.user);
 
   return {
-    posts: posts.length,
-    beers: new Set(posts.filter((p) => p.beer).map((p) => p.beer!.toLowerCase())).size,
-    cities: [...new Set(posts.map((p) => p.city))],
-    mvp: mvpId ? USERS[mvpId] : undefined,
+    posts: summary?.posts ?? 0,
+    beers: summary?.beers ?? 0,
+    cities: summary?.groupCities ?? [],
+    mvp: mvpRow && mvpRow.posts > 0 ? userById(mvpRow.userId) : undefined,
     finishers,
     earnedBadge: status.done,
   };

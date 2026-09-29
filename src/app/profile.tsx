@@ -15,9 +15,8 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
 import { cardsFor } from '@/data/cards';
-import { challengeStatus } from '@/data/challenges';
-import { KIND_LABELS, ME, ME_ID } from '@/data/seed';
-import { postHeadline, useStore } from '@/data/store';
+import { KIND_LABELS } from '@/data/seed';
+import { postHeadline, useChallengeStatus, useStore } from '@/data/store';
 import type { Post } from '@/data/types';
 import { useFeedback } from '@/feedback/feedback';
 import { useTheme } from '@/hooks/use-theme';
@@ -33,12 +32,13 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 export default function ProfileScreen() {
   const theme = useTheme();
-  const { state, resetDemo, myCity, setProfilePhoto } = useStore();
+  const { state, me, myId, signOut, myCity, setProfilePhoto, openTutorial } = useStore();
+  const statusOf = useChallengeStatus();
   const feedback = useFeedback();
   const [filter, setFilter] = useState<Filter>('all');
   const [openCardId, setOpenCardId] = useState<string | null>(null);
 
-  const cards = cardsFor(state.posts, ME_ID, state.customBeers);
+  const cards = cardsFor(state.posts, myId, state.customBeers);
   const openCard = cards.find((c) => c.beer.id === openCardId) ?? null;
 
   const pickProfilePhoto = async () => {
@@ -56,7 +56,7 @@ export default function ProfileScreen() {
   };
 
   const mine = state.posts
-    .filter((p) => p.userId === ME_ID)
+    .filter((p) => p.userId === myId)
     .sort((a, b) => b.createdAt - a.createdAt);
   const beers = mine.filter((p) => p.kind === 'beer');
   const uniqueBeers = new Set(beers.map((p) => p.beer?.toLowerCase())).size;
@@ -79,7 +79,7 @@ export default function ProfileScreen() {
     { emoji: '👑', name: 'Legend', earned: cards.some((c) => c.tierIndex >= 4) },
     ...state.challenges.map((c) => ({
       ...c.badge,
-      earned: challengeStatus(c, state.posts).done,
+      earned: statusOf(c).done,
     })),
   ].sort((a, b) => Number(b.earned) - Number(a.earned));
 
@@ -90,10 +90,10 @@ export default function ProfileScreen() {
         ? mine.filter((p) => p.photo)
         : mine.filter((p) => p.kind === filter);
 
-  const confirmReset = () =>
-    Alert.alert('Reset demo?', 'This clears your posts and restores the sample friends and challenges.', [
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'Your posts stay safe in your account. Sign back in with your email anytime.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Reset', style: 'destructive', onPress: resetDemo },
+      { text: 'Sign out', style: 'destructive', onPress: signOut },
     ]);
 
   return (
@@ -109,20 +109,21 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Change profile photo"
             style={[styles.heroAvatar, { borderColor: theme.onAccent }]}>
-            <Avatar user={ME} size={72} />
+            <Avatar user={me} size={72} />
             <View style={[styles.cameraBadge, { backgroundColor: theme.onAccent }]}>
               <Text style={styles.cameraEmoji}>📷</Text>
             </View>
           </Pressable>
           <View style={styles.flex}>
             <ThemedText type="overline" style={[styles.heroSoft, { color: theme.onAccent }]}>
-              Your nights
+              {me.name}
             </ThemedText>
             <ThemedText type="subtitle" style={{ color: theme.onAccent }}>
               {mine.length} posts
             </ThemedText>
             <ThemedText type="small" style={[styles.heroSoft, { color: theme.onAccent }]}>
-              📍 {myCity} · {state.location.sharing === 'off' ? 'location hidden' : 'sharing location'}
+              @{me.username}
+              {myCity ? ` · 📍 ${myCity}` : ''} · {state.location.sharing === 'off' ? 'location hidden' : 'sharing location'}
             </ThemedText>
           </View>
         </LinearGradient>
@@ -220,9 +221,14 @@ export default function ProfileScreen() {
 
         <CardViewer card={openCard} onClose={() => setOpenCardId(null)} />
 
-        <Pressable onPress={confirmReset} style={styles.reset} accessibilityRole="button">
+        <Pressable onPress={openTutorial} style={styles.reset} accessibilityRole="button">
           <ThemedText type="small" style={{ color: theme.textSecondary }}>
-            Reset demo data
+            How Cheers works
+          </ThemedText>
+        </Pressable>
+        <Pressable onPress={confirmSignOut} style={styles.reset} accessibilityRole="button">
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            Sign out
           </ThemedText>
         </Pressable>
       </ScrollView>

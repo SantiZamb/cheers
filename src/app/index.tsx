@@ -5,32 +5,26 @@ import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
+import { Card } from '@/components/card';
 import { useOutNow } from '@/components/friends-panel';
+import { GradientButton } from '@/components/gradient-button';
 import { PostCard } from '@/components/post-card';
 import { Screen, ScreenHeader } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
-import { challengeStatus, formatProgress, timeLeft } from '@/data/challenges';
-import { USERS } from '@/data/seed';
-import { useStore } from '@/data/store';
-import { useFeedback } from '@/feedback/feedback';
+import { formatProgress, timeLeft } from '@/data/challenges';
+import { useChallengeStatus, useStore } from '@/data/store';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function FeedScreen() {
-  const { feed, state, refreshFeed } = useStore();
-  const feedback = useFeedback();
+  const { feed, friends, refresh, loading } = useStore();
   const [refreshing, setRefreshing] = useState(false);
-  const cities = new Set(state.friendIds.map((id) => USERS[id].city)).size;
+  const cities = new Set(friends.map((f) => f.city).filter(Boolean)).size;
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    // A short pause so the pull feels like it fetched something.
-    setTimeout(() => {
-      if (!refreshFeed()) {
-        feedback.toast({ emoji: '✅', title: 'You’re all caught up', body: 'Go make some memories 🍻' });
-      }
-      setRefreshing(false);
-    }, 500);
+    await refresh();
+    setRefreshing(false);
   };
 
   return (
@@ -49,12 +43,17 @@ export default function FeedScreen() {
         }
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={loading ? null : <EmptyFeed hasFriends={friends.length > 0} />}
         ListHeaderComponent={
           <View style={styles.header}>
             <ScreenHeader
               overline="Tonight"
               title="Cheers"
-              subtitle={`${state.friendIds.length} friends · ${cities} cities`}
+              subtitle={
+                friends.length
+                  ? `${friends.length} ${friends.length === 1 ? 'friend' : 'friends'}${cities ? ` · ${cities} ${cities === 1 ? 'city' : 'cities'}` : ''}`
+                  : 'Add friends to see their nights'
+              }
             />
             <OutNow />
             <ChallengeBanner />
@@ -65,14 +64,37 @@ export default function FeedScreen() {
   );
 }
 
+function EmptyFeed({ hasFriends }: { hasFriends: boolean }) {
+  return (
+    <Card style={styles.empty}>
+      <Text style={styles.emptyEmoji}>🍻</Text>
+      <ThemedText type="defaultSemiBold" style={styles.center}>
+        {hasFriends ? 'Quiet night so far' : 'Your feed is waiting'}
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+        {hasFriends
+          ? 'Be the first to share what you’re drinking tonight.'
+          : 'Add friends from the Map tab, then share your first beer.'}
+      </ThemedText>
+      <GradientButton label="Share a beer" onPress={() => router.navigate('/post')} style={styles.stretch} />
+      {!hasFriends && (
+        <Pressable onPress={() => router.navigate('/map')} hitSlop={8}>
+          <ThemedText type="smallBold" themeColor="accentEnd">
+            Find friends →
+          </ThemedText>
+        </Pressable>
+      )}
+    </Card>
+  );
+}
+
 /** Stories-style row of friends; tapping one shows them on the map. */
 function OutNow() {
   const theme = useTheme();
-  const { state, setMapFocus } = useStore();
+  const { friends: all, setMapFocus } = useStore();
   const isOut = useOutNow();
-  const friends = state.friendIds
-    .map((id) => USERS[id])
-    .sort((a, b) => Number(isOut(b.id)) - Number(isOut(a.id)));
+  const friends = [...all].sort((a, b) => Number(isOut(b.id)) - Number(isOut(a.id)));
+  if (!friends.length) return null;
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stories}>
@@ -113,9 +135,10 @@ function OutNow() {
 /** Nudges the user towards a pending invite or their closest-to-finishing challenge. */
 function ChallengeBanner() {
   const theme = useTheme();
-  const { state } = useStore();
+  const { state, userById } = useStore();
+  const statusOf = useChallengeStatus();
   const candidates = state.challenges
-    .map((c) => ({ challenge: c, status: challengeStatus(c, state.posts) }))
+    .map((c) => ({ challenge: c, status: statusOf(c) }))
     .filter(({ status }) => status.active && (!status.joined || !status.done));
   const current = candidates.find(({ status }) => !status.joined) ?? candidates[0];
   if (!current) return null;
@@ -136,7 +159,7 @@ function ChallengeBanner() {
           <ThemedText type="overline" style={[styles.onAccent, { color: theme.onAccent }]}>
             {status.joined
               ? 'Your challenge'
-              : `${challenge.invitedBy ? USERS[challenge.invitedBy].name + ' invited you' : 'New challenge'}`}
+              : `${challenge.invitedBy ? userById(challenge.invitedBy).name + ' invited you' : 'New challenge'}`}
           </ThemedText>
           <ThemedText type="defaultSemiBold" style={{ color: theme.onAccent }}>
             {challenge.title}
@@ -208,5 +231,18 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  empty: {
+    alignItems: 'center',
+    paddingVertical: Spacing.four,
+  },
+  emptyEmoji: {
+    fontSize: 40,
+  },
+  center: {
+    textAlign: 'center',
+  },
+  stretch: {
+    alignSelf: 'stretch',
   },
 });

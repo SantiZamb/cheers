@@ -4,7 +4,7 @@ A social app for friends to capture, rate and share their nights out drinking be
 
 **Go out → snap it → rate it → share it → friends react → join a challenge → go out again.**
 
-Cheers is a working **demo**: it runs entirely on the phone with sample friends who react to your posts, so the whole social loop can be tried without a backend.
+Cheers runs on [Supabase](https://supabase.com) (auth, Postgres with row-level security, storage, realtime) with a local cache on the phone, so screens open instantly and your actions show up before the server even answers.
 
 <p>
   <img src="docs/screenshots/feed.jpg" width="200" alt="Feed" />
@@ -31,36 +31,43 @@ Rewards are built in: posting, rating, reactions and finished challenges trigger
 
 ## Getting started
 
-**Requirements:** Node 20.19 or newer, and the [Expo Go](https://expo.dev/go) app on your phone (or Xcode / Android Studio for simulators).
+**Requirements:** Node 20.19 or newer, a [Supabase](https://supabase.com) project, and the [Expo Go](https://expo.dev/go) app on your phone (or Xcode / Android Studio for simulators).
 
 ```bash
 npm install
+cp .env.example .env.local        # then fill in your project URL and publishable key
+npx supabase login                # once
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push              # creates tables, security rules, storage buckets, beer catalog
 npx expo start
 ```
 
-Then scan the QR code with your phone's camera (iOS) or Expo Go (Android), or press `i` / `a` to open a simulator. Your phone and computer need to be on the same Wi‑Fi; if they can't see each other, use `npx expo start --tunnel`.
+Scan the QR code with your phone's camera (iOS) or Expo Go (Android), or press `i` / `a` for a simulator. Your phone and computer need to be on the same Wi‑Fi; otherwise use `npx expo start --tunnel`.
 
-Everything the app uses ships inside Expo Go, so no custom native build is needed.
+Sign-in is email + password. In the Supabase dashboard, **Authentication → Sign In / Providers → Email** has **Confirm email** turned off, so new accounts are signed in immediately without any email.
 
 ### Useful commands
 
 ```bash
 npx tsc --noEmit   # typecheck
 npx expo lint      # lint
-npx expo-doctor    # check dependencies and config
+npm run test:db    # database security tests (runs Postgres in-process, no Docker)
+npx supabase db push   # apply new migrations
 ```
 
-## How the demo works
+## How it works
 
-- **No backend.** Friends, posts and challenges are sample data (`src/data/seed.ts`). Friends' profile photos are placeholder portraits from randomuser.me; the beer list is a built-in catalog (`src/data/beers.ts`), and beers not in it can be added by name. After you post, simulated friends react and comment over the next ~15 seconds.
-- **Saved on the device.** Your posts and photos persist between launches. *Profile → Reset demo data* restores the sample content.
-- **Location** is only requested when you turn on location sharing or search for bars. Friends' locations are fixed sample positions.
-- **Bars** come from [OpenStreetMap](https://www.openstreetmap.org/copyright) via the free public Overpass API. OpenStreetMap has no ratings, so "best" is a Cheers score: your crew's Cheers ratings for a venue first, then what the listing offers (brews its own beer, notable place, outdoor seating, …) and distance. The public server is sometimes overloaded; the app retries and shows a "try again" card if it can't get through.
-- **Notifications** are local only. Remote push isn't available in Expo Go on Android and would need a development build.
+- **Sign-in** is email + password (8+ characters for new accounts). First launch asks for a name, city and optional photo.
+- **Security** lives in the database: row-level security means you only ever receive your own and your accepted friends' posts, reactions, comments and (if they share it) locations. See `supabase/migrations/`.
+- **Local caching.** Every query result is cached in SQLite on the phone (TanStack Query) and shown immediately on the next launch while fresh data loads in the background. Posting, reacting, commenting, friend requests and joining challenges update the screen instantly and sync in the background; if the server rejects a change it's rolled back with a message.
+- **Live updates.** Supabase Realtime pushes friends' activity into the app ("Maya reacted 🍻…") and refreshes the cache.
+- **Push notifications** are sent by the database itself (Postgres triggers → Expo push service) when friends post, react, comment, send or accept requests, or invite you to a challenge. The app needs an Expo project id to receive them (`npx eas-cli@latest init`), and on Android a development build rather than Expo Go.
+- **Photos.** Post photos are private (friends get short-lived signed links); profile photos are public to signed-in users.
+- **Bars** come from [OpenStreetMap](https://www.openstreetmap.org/copyright) via the free public Overpass API. OpenStreetMap has no ratings, so "best" is a Cheers score: Cheers ratings for a venue first, then what the listing offers and distance. The public server is sometimes overloaded; the app retries and shows a "try again" card.
 
 ## Tech stack
 
-[Expo](https://expo.dev) SDK 57 · React Native 0.86 · React 19 with the React Compiler · TypeScript · Expo Router (native tabs) · Reanimated · react-native-maps · expo-location, expo-image-picker, expo-haptics, expo-audio, expo-notifications, expo-file-system.
+[Expo](https://expo.dev) SDK 57 · [Supabase](https://supabase.com) · TanStack Query · React Native 0.86 · React 19 with the React Compiler · TypeScript · Expo Router (native tabs) · Reanimated · react-native-maps · expo-location, expo-image-picker, expo-haptics, expo-audio, expo-notifications, expo-file-system.
 
 ## Project structure
 
@@ -68,11 +75,13 @@ npx expo-doctor    # check dependencies and config
 src/
   app/          Screens (Expo Router): index (Feed), map, post (Share), challenges, profile
   components/   UI building blocks: cards, buttons, post and challenge cards, map, panels
-  data/         Types, sample data, the app store (state + simulated friends), challenge logic, persistence
+  auth/         Sign-in (email code), onboarding, auth session
+  data/         Supabase API, the store (cached queries + optimistic updates + realtime), beers, cards, challenges
   feedback/     Rewards: haptics, sounds, toasts and the celebration overlay
-  lib/          Location, geo helpers, bar search, notifications
+  lib/          Supabase client, query cache, location, geo helpers, bar search, notifications
   constants/    Theme: colors (light + dark), spacing, radii
 assets/sounds/  Chime and pop sound effects
+supabase/       Migrations (schema, security rules, push triggers, beer catalog) and database tests
 ```
 
 Developer notes on architecture and conventions are in [CLAUDE.md](CLAUDE.md).

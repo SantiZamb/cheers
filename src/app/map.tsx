@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { Keyboard, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeIn, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarsPanel, type BarSearch } from '@/components/bars-panel';
-import { CheersMap } from '@/components/cheers-map';
+import { CheersMap, type MapFriend } from '@/components/cheers-map';
 import { FriendsPanel, useOutNow } from '@/components/friends-panel';
 import { Glass } from '@/components/glass';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
-import { USERS } from '@/data/seed';
 import { useStore } from '@/data/store';
 import { useFeedback } from '@/feedback/feedback';
 import { findBestBars } from '@/lib/bars';
@@ -20,6 +19,8 @@ type Mode = 'friends' | 'bars';
 
 const LOCATION_FRESH_MS = 5 * 60 * 1000;
 const SHEET_OVERLAP = 28;
+/** Room left above the sheet for the Friends / Bars switch when the map is tucked away. */
+const COLLAPSED_BAR = 60;
 
 const isFresh = (updatedAt: number) => Date.now() - updatedAt < LOCATION_FRESH_MS;
 
@@ -28,7 +29,7 @@ export default function MapScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const { state, refreshMyLocation, mapFocus, setMapFocus } = useStore();
+  const { state, friends: allFriends, refreshMyLocation, mapFocus, setMapFocus } = useStore();
   const feedback = useFeedback();
   const isOut = useOutNow();
 
@@ -37,6 +38,15 @@ export default function MapScreen() {
   const [search, setSearch] = useState<BarSearch>({ status: 'idle' });
   const [selectedBarId, setSelectedBarId] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const sheetScroll = useRef<ScrollView>(null);
+
+  // "List only": the map slides up out of the way, e.g. while searching for friends.
+  const [listOnly, setListOnlyState] = useState(false);
+  const collapse = useSharedValue(0);
+  const setListOnly = (next: boolean) => {
+    setListOnlyState(next);
+    collapse.set(withTiming(next ? 1 : 0, { duration: 250 }));
+  };
 
   // Arriving from the feed with a friend to show: switch to the friends view.
   const [lastFocus, setLastFocus] = useState(mapFocus);
@@ -52,8 +62,17 @@ export default function MapScreen() {
   }, []);
 
   const mapHeight = Math.round(height * 0.44);
+  const collapsedHeight = insets.top + COLLAPSED_BAR;
+  const mapBoxStyle = useAnimatedStyle(() => ({
+    height: interpolate(collapse.get(), [0, 1], [mapHeight, collapsedHeight]) + SHEET_OVERLAP,
+  }));
+  const mapFadeStyle = useAnimatedStyle(() => ({ opacity: 1 - collapse.get() }));
+
   const me = state.location.me;
-  const friends = state.friendIds.map((id) => ({ user: USERS[id], outNow: isOut(id) }));
+  // Only friends currently sharing their location have a position to plot.
+  const friends: MapFriend[] = allFriends.flatMap((user) =>
+    user.lat != null && user.lng != null ? [{ user: { ...user, lat: user.lat, lng: user.lng }, outNow: isOut(user.id) }] : []
+  );
   const bars = search.status === 'done' ? search.bars : [];
 
   const runSearch = async (r = radius) => {
@@ -88,30 +107,36 @@ export default function MapScreen() {
     if (next === mode) return;
     feedback.select();
     setMode(next);
+    // Bars are all about the map.
+    if (next === 'bars' && listOnly) setListOnly(false);
     if (next === 'bars' && search.status === 'idle' && me) runSearch();
   };
 
   return (
     <ThemedView style={styles.container}>
-      <CheersMap
-        style={{ height: mapHeight + SHEET_OVERLAP }}
-        mode={mode}
-        me={me}
-        friends={friends}
-        bars={bars}
-        radius={radius}
-        selectedBarId={selectedBarId}
-        focusFriendId={mapFocus}
-        onSelectBar={(id) => {
-          feedback.select();
-          setSelectedBarId(id);
-        }}
-        onSelectFriend={(id) => {
-          feedback.select();
-          setMapFocus(id);
-        }}
-        edgePadding={{ top: insets.top + 56, bottom: SHEET_OVERLAP }}
-      />
+      <Animated.View style={[styles.mapBox, mapBoxStyle]}>
+        <Animated.View style={mapFadeStyle} pointerEvents={listOnly ? 'none' : 'auto'}>
+          <CheersMap
+            style={{ height: mapHeight + SHEET_OVERLAP }}
+            mode={mode}
+            me={me}
+            friends={friends}
+            bars={bars}
+            radius={radius}
+            selectedBarId={selectedBarId}
+            focusFriendId={mapFocus}
+            onSelectBar={(id) => {
+              feedback.select();
+              setSelectedBarId(id);
+            }}
+            onSelectFriend={(id) => {
+              feedback.select();
+              setMapFocus(id);
+            }}
+            edgePadding={{ top: insets.top + 56, bottom: SHEET_OVERLAP }}
+          />
+        </Animated.View>
+      </Animated.View>
 
       <View style={[styles.segmentWrap, { top: insets.top + Spacing.two }]} pointerEvents="box-none">
         <Glass style={styles.segment}>
@@ -134,10 +159,43 @@ export default function MapScreen() {
       </View>
 
       <ThemedView style={[styles.sheet, { marginTop: -SHEET_OVERLAP }]}>
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        {mode === 'friends' && (
+          <Pressable
+            onPress={() => {
+              feedback.select();
+              if (listOnly) Keyboard.dismiss();
+              setListOnly(!listOnly);
+            }}
+            hitSlop={8}
+            style={styles.handle}
+            accessibilityRole="button"
+            accessibilityLabel={listOnly ? 'Show the map' : 'Hide the map'}>
+            <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+            <ThemedText type="small" themeColor="textSecondary">
+              {listOnly ? '⌄  Show map' : '⌃  Friends only'}
+            </ThemedText>
+          </Pressable>
+        )}
+        <ScrollView
+          ref={sheetScroll}
+          contentContainerStyle={styles.sheetContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets>
           <Animated.View key={mode} entering={FadeIn.duration(150)}>
             {mode === 'friends' ? (
-              <FriendsPanel focusedId={mapFocus} onFocus={setMapFocus} />
+              <FriendsPanel
+                focusedId={mapFocus}
+                onFocus={setMapFocus}
+                onSearchFocus={(y) => {
+                  if (!listOnly) setListOnly(true);
+                  // Bring the search box to the top, results appear right under it.
+                  sheetScroll.current?.scrollTo({ y, animated: true });
+                }}
+                onSearchBlur={(query) => {
+                  if (!query.trim()) setListOnly(false);
+                }}
+              />
             ) : (
               <BarsPanel
                 radius={radius}
@@ -161,6 +219,19 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  mapBox: {
+    overflow: 'hidden',
+  },
+  handle: {
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingTop: Spacing.two,
+  },
+  grabber: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
   },
   segmentWrap: {
     position: 'absolute',

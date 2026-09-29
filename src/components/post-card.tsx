@@ -15,7 +15,7 @@ import { Card } from '@/components/card';
 import { RatingPill } from '@/components/rating';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
-import { KIND_LABELS, ME_ID, USERS } from '@/data/seed';
+import { KIND_LABELS } from '@/data/seed';
 import { timeAgo, useStore } from '@/data/store';
 import { REACTIONS, type Post, type Reaction } from '@/data/types';
 import { useTheme } from '@/hooks/use-theme';
@@ -24,7 +24,8 @@ const COLLAPSED_COMMENTS = 2;
 
 /** A post in any feed or list. Reacting and commenting happen inline; there's no detail screen. */
 export function PostCard({ post }: { post: Post }) {
-  const author = USERS[post.userId];
+  const { userById } = useStore();
+  const author = userById(post.userId);
   const kind = KIND_LABELS[post.kind];
   const where = [post.venue, post.city].filter(Boolean).join(', ');
 
@@ -35,14 +36,21 @@ export function PostCard({ post }: { post: Post }) {
         <View style={styles.flex}>
           <ThemedText type="smallBold">{author.name}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {kind.emoji} {kind.label} · {timeAgo(post.createdAt)}
+            {kind.emoji} {kind.label} · {post.pending ? 'Sending…' : timeAgo(post.createdAt)}
           </ThemedText>
         </View>
         {post.rating ? <RatingPill value={post.rating} /> : null}
       </View>
 
       {post.photo ? (
-        <Image source={{ uri: post.photo }} style={styles.photo} contentFit="cover" transition={150} />
+        <Image
+          // Signed URLs change on every refresh; the storage path keeps the disk cache stable.
+          source={{ uri: post.photo, cacheKey: post.photoKey }}
+          style={styles.photo}
+          contentFit="cover"
+          cachePolicy="disk"
+          transition={150}
+        />
       ) : null}
 
       <View style={styles.body}>
@@ -92,9 +100,9 @@ function ReactionBar({ post }: { post: Post }) {
 
 function ReactionPill({ post, reaction }: { post: Post; reaction: Reaction }) {
   const theme = useTheme();
-  const { toggleReaction } = useStore();
+  const { toggleReaction, myId } = useStore();
   const users = post.reactions[reaction] ?? [];
-  const mine = users.includes(ME_ID);
+  const mine = users.includes(myId);
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
 
@@ -129,7 +137,7 @@ function ReactionPill({ post, reaction }: { post: Post; reaction: Reaction }) {
 
 function Comments({ post }: { post: Post }) {
   const theme = useTheme();
-  const { addComment } = useStore();
+  const { addComment, userById } = useStore();
   const [expanded, setExpanded] = useState(false);
   const [replying, setReplying] = useState(false);
   const [text, setText] = useState('');
@@ -166,9 +174,9 @@ function Comments({ post }: { post: Post }) {
       )}
       {shown.map((c) => (
         <Animated.View key={c.id} entering={FadeIn.duration(150)} style={styles.comment}>
-          <Avatar user={USERS[c.userId]} size={22} />
+          <Avatar user={userById(c.userId)} size={22} />
           <ThemedText type="small" style={styles.flex}>
-            <ThemedText type="smallBold">{USERS[c.userId].name} </ThemedText>
+            <ThemedText type="smallBold">{userById(c.userId).name} </ThemedText>
             {c.text}
           </ThemedText>
         </Animated.View>

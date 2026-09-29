@@ -7,7 +7,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { beerColor, customBeerId, searchBeers, type Beer } from '@/data/beers';
 import { cardsFor, levelForXp, tierOf, type BeerCard } from '@/data/cards';
-import { ME_ID } from '@/data/seed';
 import { useStore } from '@/data/store';
 import { useFeedback } from '@/feedback/feedback';
 import { useTheme } from '@/hooks/use-theme';
@@ -17,11 +16,11 @@ const MAX_RESULTS = 6;
 /** Search-and-select for the beer being checked in, previewing the card it earns or upgrades. */
 export function BeerPicker({ value, onChange }: { value: Beer | null; onChange: (beer: Beer | null) => void }) {
   const theme = useTheme();
-  const { state } = useStore();
+  const { state, myId } = useStore();
   const feedback = useFeedback();
   const [query, setQuery] = useState('');
 
-  const cards = cardsFor(state.posts, ME_ID, state.customBeers);
+  const cards = cardsFor(state.posts, myId, state.customBeers);
   const cardFor = (beer: Beer) => cards.find((c) => c.beer.id === beer.id);
 
   if (value) {

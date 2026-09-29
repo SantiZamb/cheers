@@ -9,7 +9,8 @@ import { useTheme } from '@/hooks/use-theme';
 import type { User } from '@/data/types';
 import type { Bar } from '@/lib/bars';
 
-export type MapFriend = { user: User; outNow: boolean };
+/** A friend who is sharing a position (only these are plotted). */
+export type MapFriend = { user: User & { lat: number; lng: number }; outNow: boolean };
 
 export type CheersMapProps = {
   mode: 'friends' | 'bars';

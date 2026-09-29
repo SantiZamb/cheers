@@ -47,7 +47,8 @@
           "locationWhenInUsePermission": "Cheers uses your location to find the best bars nearby and, if you choose, to show friends where you are."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

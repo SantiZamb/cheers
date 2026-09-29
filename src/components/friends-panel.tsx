@@ -1,5 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
@@ -9,10 +10,10 @@ import { GradientButton } from '@/components/gradient-button';
 import { PostCard } from '@/components/post-card';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
-import { KIND_LABELS, ME, ME_ID, USERS } from '@/data/seed';
+import { searchProfiles } from '@/data/api';
+import { KIND_LABELS } from '@/data/seed';
 import { postHeadline, timeAgo, useStore } from '@/data/store';
 import type { LocationSharing, User } from '@/data/types';
-import { useFeedback } from '@/feedback/feedback';
 import { distanceMeters, formatDistance } from '@/lib/geo';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -28,36 +29,72 @@ export function useOutNow() {
 export function FriendsPanel({
   focusedId,
   onFocus,
+  onSearchFocus,
+  onSearchBlur,
 }: {
   focusedId: string | null;
   onFocus: (id: string | null) => void;
+  /** Called with the search box's offset in the panel, so the screen can make room and scroll to it. */
+  onSearchFocus?: (y: number) => void;
+  onSearchBlur?: (query: string) => void;
 }) {
   const theme = useTheme();
-  const { state, addFriend } = useStore();
+  const { myId, friends: all, incomingRequests, outgoingRequests, sendFriendRequest, acceptFriend, removeFriend } =
+    useStore();
   const isOut = useOutNow();
   const [query, setQuery] = useState('');
+  const [searchY, setSearchY] = useState(0);
+  const q = query.trim();
 
-  const friends = state.friendIds
-    .map((id) => USERS[id])
-    .sort((a, b) => Number(isOut(b.id)) - Number(isOut(a.id)));
-  const q = query.trim().toLowerCase();
-  const suggestions = Object.values(USERS).filter(
-    (u) =>
-      u.id !== ME_ID &&
-      !state.friendIds.includes(u.id) &&
-      (!q || u.name.toLowerCase().includes(q) || u.city.toLowerCase().includes(q))
-  );
+  // Server-side people search; results are cached per query, so retyping is instant.
+  const search = useQuery({
+    queryKey: ['profileSearch', q],
+    queryFn: () => searchProfiles(q, myId),
+    enabled: q.length >= 2,
+    staleTime: 60 * 1000,
+  });
+  const known = new Set([...all, ...incomingRequests, ...outgoingRequests].map((u) => u.id));
+  const results = (search.data ?? []).filter((u) => !known.has(u.id));
+
+  const friends = [...all].sort((a, b) => Number(isOut(b.id)) - Number(isOut(a.id)));
 
   return (
     <View style={styles.gap}>
       <SharingCard />
 
+      {incomingRequests.length > 0 && (
+        <>
+          <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
+            Friend requests
+          </ThemedText>
+          {incomingRequests.map((u) => (
+            <Animated.View key={u.id} layout={LinearTransition.duration(200)} entering={FadeIn.duration(150)}>
+              <Card style={styles.row}>
+                <Avatar user={u} />
+                <PersonText user={u} />
+                <Pressable onPress={() => removeFriend(u)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Decline ${u.name}`}>
+                  <ThemedText type="smallBold" themeColor="textSecondary">
+                    Decline
+                  </ThemedText>
+                </Pressable>
+                <GradientButton size="sm" label="Accept" onPress={() => acceptFriend(u)} accessibilityLabel={`Accept ${u.name}`} />
+              </Card>
+            </Animated.View>
+          ))}
+        </>
+      )}
+
       <View style={styles.sectionHead}>
         <ThemedText type="defaultSemiBold">Your crew</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          {friends.filter((f) => isOut(f.id)).length} out now
+          {friends.length ? `${friends.filter((f) => isOut(f.id)).length} out now` : ''}
         </ThemedText>
       </View>
+      {friends.length === 0 && (
+        <ThemedText type="small" themeColor="textSecondary">
+          No friends yet. Search below to find people you know.
+        </ThemedText>
+      )}
       {friends.map((f) => (
         <Animated.View key={f.id} layout={LinearTransition.duration(200)}>
           <FriendRow
@@ -68,35 +105,66 @@ export function FriendsPanel({
         </Animated.View>
       ))}
 
-      <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
-        Add friends
-      </ThemedText>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search by name or city"
-        placeholderTextColor={theme.textSecondary}
-        style={[styles.search, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
-      />
-      {suggestions.map((u) => (
+      <View style={styles.searchBlock} onLayout={(e) => setSearchY(e.nativeEvent.layout.y)}>
+        <ThemedText type="defaultSemiBold">Add friends</ThemedText>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          onFocus={() => onSearchFocus?.(searchY)}
+          onBlur={() => onSearchBlur?.(query)}
+          placeholder="Search by name, @username or city"
+          placeholderTextColor={theme.textSecondary}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+          style={[styles.search, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
+        />
+      </View>
+      {outgoingRequests.map((u) => (
+        <Card key={u.id} style={styles.row}>
+          <Avatar user={u} />
+          <PersonText user={u} />
+          <Pressable onPress={() => removeFriend(u)} hitSlop={8} accessibilityRole="button">
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              Requested · Cancel
+            </ThemedText>
+          </Pressable>
+        </Card>
+      ))}
+      {results.map((u) => (
         <Animated.View key={u.id} layout={LinearTransition.duration(200)} entering={FadeIn.duration(150)}>
           <Card style={styles.row}>
             <Avatar user={u} />
-            <View style={styles.flex}>
-              <ThemedText type="smallBold">{u.name}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {u.city}
-              </ThemedText>
-            </View>
-            <GradientButton size="sm" label="Add" onPress={() => addFriend(u.id)} accessibilityLabel={`Add ${u.name}`} />
+            <PersonText user={u} />
+            <GradientButton size="sm" label="Add" onPress={() => sendFriendRequest(u)} accessibilityLabel={`Add ${u.name}`} />
           </Card>
         </Animated.View>
       ))}
-      {suggestions.length === 0 && q ? (
+      {q.length >= 2 && search.isSuccess && results.length === 0 ? (
         <ThemedText type="small" themeColor="textSecondary">
-          No one matching “{query}”.
+          No one matching “{q}”.
         </ThemedText>
       ) : null}
+      {q.length > 0 && q.length < 2 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Keep typing…
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+function PersonText({ user }: { user: User }) {
+  return (
+    <View style={styles.flex}>
+      <ThemedText type="smallBold" numberOfLines={1}>
+        {user.name}
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+        @{user.username}
+        {user.city ? ` · ${user.city}` : ''}
+      </ThemedText>
     </View>
   );
 }
@@ -153,8 +221,7 @@ function SharingCard() {
 
 function FriendRow({ friend, open, onToggle }: { friend: User; open: boolean; onToggle: () => void }) {
   const theme = useTheme();
-  const { state } = useStore();
-  const feedback = useFeedback();
+  const { state, me, removeFriend } = useStore();
   const isOut = useOutNow();
   const posts = state.posts
     .filter((p) => p.userId === friend.id)
@@ -162,8 +229,11 @@ function FriendRow({ friend, open, onToggle }: { friend: User; open: boolean; on
   const latest = posts[0];
   const rated = posts.filter((p) => p.kind === 'beer' && p.rating);
   const avg = rated.length ? (rated.reduce((s, p) => s + p.rating!, 0) / rated.length).toFixed(1) : '–';
-  const me = state.location.me ?? ME;
-  const away = formatDistance(distanceMeters(me, friend));
+  // Distance only when both of you are sharing a position.
+  const away =
+    me.lat != null && me.lng != null && friend.lat != null && friend.lng != null
+      ? formatDistance(distanceMeters({ lat: me.lat, lng: me.lng }, { lat: friend.lat, lng: friend.lng }))
+      : null;
   const out = isOut(friend.id);
 
   return (
@@ -178,7 +248,7 @@ function FriendRow({ friend, open, onToggle }: { friend: User; open: boolean; on
             {friend.name}
             <ThemedText type="small" themeColor="textSecondary">
               {'  '}
-              {friend.city} · {away}
+              {[friend.city, away && `${away} away`].filter(Boolean).join(' · ')}
             </ThemedText>
           </ThemedText>
           <ThemedText type="small" themeColor={out ? 'accentEnd' : 'textSecondary'} numberOfLines={1}>
@@ -194,17 +264,22 @@ function FriendRow({ friend, open, onToggle }: { friend: User; open: boolean; on
           <View style={styles.stats}>
             <MiniStat label="Posts" value={String(posts.length)} />
             <MiniStat label="Avg rating" value={avg} />
-            <MiniStat label="Away" value={away} />
+            <MiniStat label="Away" value={away ?? 'Hidden'} />
           </View>
+          {latest ? <PostCard post={latest} /> : null}
           <Pressable
             onPress={() =>
-              feedback.toast({ emoji: '👋', title: `You nudged ${friend.name}`, body: `“Beer later?” sent to ${friend.city}` })
+              Alert.alert(`Remove ${friend.name}?`, 'You’ll stop seeing each other’s posts and locations.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: () => removeFriend(friend) },
+              ])
             }
-            style={({ pressed }) => [styles.nudge, { borderColor: theme.border }, pressed && styles.pressed]}
+            style={styles.removeLink}
             accessibilityRole="button">
-            <ThemedText type="smallBold">👋 Nudge for a beer</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Remove friend
+            </ThemedText>
           </Pressable>
-          {latest ? <PostCard post={latest} /> : null}
         </Animated.View>
       )}
     </Card>
@@ -255,6 +330,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two,
   },
+  searchBlock: {
+    gap: Spacing.three,
+    marginTop: Spacing.two,
+  },
   search: {
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.three,
@@ -298,11 +377,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.one,
     borderRadius: Radius.sm,
   },
-  nudge: {
-    alignItems: 'center',
-    paddingVertical: Spacing.two + Spacing.one,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
+  removeLink: {
+    alignSelf: 'center',
+    padding: Spacing.one,
   },
   pressed: {
     opacity: 0.75,

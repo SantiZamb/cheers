@@ -3,12 +3,13 @@ import type { Beer } from '@/data/beers';
 export type User = {
   id: string;
   name: string;
+  username: string;
   /** Profile photo URL. Missing → initials. */
   photo?: string;
   city: string;
-  /** Where the friend was last seen out (their shared location). */
-  lat: number;
-  lng: number;
+  /** Shared location, only present while the user shares it with you. */
+  lat?: number;
+  lng?: number;
 };
 
 /** What friends can see of the user's location. */
@@ -39,8 +40,12 @@ export type Post = {
   userId: string;
   kind: PostKind;
   createdAt: number;
-  /** Local file URI of the attached photo, if any. */
+  /** Displayable URI of the attached photo (signed URL, or a local file while uploading). */
   photo?: string;
+  /** Stable storage path, used as the image cache key since signed URLs change. */
+  photoKey?: string;
+  /** True while an optimistic post is still being saved. */
+  pending?: boolean;
   /** 1–5. Rates the beer for `beer` posts and the night for `night` posts. */
   rating?: number;
   /** Catalog or custom beer id; drives beer cards. */
@@ -76,17 +81,53 @@ export type Challenge = {
   goal: number;
   startsAt: number;
   endsAt: number;
+  /** Users who joined. */
   participantIds: string[];
+  /** Everyone invited or joined (for showing who's in). */
+  memberIds: string[];
   /** Set when a friend invited the current user and they haven't joined yet. */
   invitedBy?: string;
   badge: { emoji: string; name: string };
+  /** Server-computed leaderboard and totals (covers participants who aren't your friends). */
+  summary?: ChallengeSummary;
 };
 
+export type ChallengeSummary = {
+  standings: { userId: string; value: number; detail?: string | null; posts: number }[];
+  groupCities: string[];
+  posts: number;
+  beers: number;
+};
+
+/** A named crew of friends with a photo and its own leaderboard. */
+export type Group = {
+  id: string;
+  name: string;
+  /** Public URL of the group photo. Missing → initial on a gradient. */
+  photo?: string;
+  createdBy?: string;
+  createdAt: number;
+  memberIds: string[];
+};
+
+/** What a group leaderboard can rank by. */
+export type GroupMetric = 'beers' | 'posts' | 'nights' | 'uniqueBeers' | 'avgRating' | 'cheers';
+
+export type GroupPeriod = 'week' | 'month' | 'all';
+
+export type GroupLeaderboard = {
+  standings: ({ userId: string; avgRating: number | null } & Record<Exclude<GroupMetric, 'avgRating'>, number>)[];
+  posts: number;
+  beers: number;
+  cities: number;
+};
+
+/** The data the screens read, assembled from cached Supabase queries by the store. */
 export type AppState = {
-  version: number;
   posts: Post[];
   friendIds: string[];
   challenges: Challenge[];
+  groups: Group[];
   /** The user's own profile photo (local file URI). */
   profilePhoto?: string;
   /** Beers the user typed that aren't in the catalog. */
@@ -95,6 +136,4 @@ export type AppState = {
     sharing: LocationSharing;
     me?: MyLocation;
   };
-  /** Index into FRIEND_POST_POOL of the next simulated friend post to reveal on refresh. */
-  nextPoolIndex: number;
 };
