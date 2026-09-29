@@ -8,6 +8,7 @@ import { GradientButton } from '@/components/gradient-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
+import { checkEmail } from '@/lib/email';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -15,7 +16,10 @@ const MIN_PASSWORD = 8;
 
 type Mode = 'signIn' | 'signUp';
 
-/** Email + password. Email confirmation is off in the Supabase project, so sign-up signs you straight in. */
+/**
+ * Email + password. Email confirmation is off in the Supabase project, so sign-up signs you straight in;
+ * the address is checked on the device instead (format, fake domains, "did you mean gmail.com?").
+ */
 export function SignInScreen() {
   const theme = useTheme();
   const [mode, setMode] = useState<Mode>('signIn');
@@ -25,18 +29,25 @@ export function SignInScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Email problems are shown once the user leaves the field (or taps the button), not mid-typing.
+  const [emailTouched, setEmailTouched] = useState(false);
   const passwordRef = useRef<TextInput>(null);
 
-  const validEmail = /^\S+@\S+\.\S+$/.test(email.trim());
+  const emailCheck = checkEmail(email, { forSignUp: mode === 'signUp' });
+  const showEmailHint = emailTouched && email.trim().length > 0;
   const validPassword = mode === 'signIn' ? password.length > 0 : password.length >= MIN_PASSWORD;
-  const canSubmit = validEmail && validPassword && !busy;
+  const canSubmit = email.trim().length > 0 && validPassword && !busy;
 
   const submit = async () => {
     if (!canSubmit) return;
+    if (!emailCheck.ok) {
+      setEmailTouched(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
-    const credentials = { email: email.trim().toLowerCase(), password };
+    const credentials = { email: emailCheck.email, password };
     const { data, error: err } =
       mode === 'signIn'
         ? await supabase.auth.signInWithPassword(credentials)
@@ -108,8 +119,35 @@ export function SignInScreen() {
               textContentType={mode === 'signUp' ? 'username' : 'emailAddress'}
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
-              style={inputStyle}
+              onBlur={() => setEmailTouched(true)}
+              style={[inputStyle, showEmailHint && !emailCheck.ok && { borderColor: theme.accentEnd, borderWidth: 1.5 }]}
+              accessibilityLabel="Email"
+              accessibilityHint={showEmailHint && !emailCheck.ok ? emailCheck.reason : undefined}
             />
+            {showEmailHint && (!emailCheck.ok || emailCheck.suggestion) ? (
+              <Animated.View entering={FadeIn.duration(150)} style={styles.emailHint}>
+                {!emailCheck.ok ? (
+                  <ThemedText type="small" style={{ color: theme.accentEnd }}>
+                    {emailCheck.reason}
+                  </ThemedText>
+                ) : null}
+                {emailCheck.suggestion ? (
+                  <Pressable
+                    onPress={() => setEmail(emailCheck.suggestion!)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${emailCheck.suggestion}`}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Did you mean{' '}
+                      <ThemedText type="smallBold" themeColor="accentEnd">
+                        {emailCheck.suggestion}
+                      </ThemedText>
+                      ?
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </Animated.View>
+            ) : null}
             <View>
               <TextInput
                 ref={passwordRef}
@@ -222,6 +260,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
     fontSize: 17,
+  },
+  emailHint: {
+    gap: Spacing.one,
+    marginTop: -Spacing.two,
+    paddingHorizontal: Spacing.two,
   },
   passwordInput: {
     paddingRight: 64,

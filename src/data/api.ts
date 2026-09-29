@@ -245,9 +245,11 @@ export async function createPost(post: Post, localPhoto?: string) {
   let photoPath: string | null = null;
   if (localPhoto) {
     photoPath = `${post.userId}/${post.id}.jpg`;
+    // Plain insert, not upsert: every post id is new, and upsert would also need an UPDATE
+    // policy on post-photos, which the bucket deliberately doesn't have.
     const { error } = await supabase.storage
       .from(POST_PHOTOS_BUCKET)
-      .upload(photoPath, await readBytes(localPhoto), { contentType: 'image/jpeg', upsert: true });
+      .upload(photoPath, await readBytes(localPhoto), { contentType: 'image/jpeg' });
     fail(error);
   }
   const { error } = await supabase.from('posts').insert({
