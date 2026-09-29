@@ -4,7 +4,6 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MIN_PASSWORD, ResetPassword } from '@/auth/reset-password';
 import { GradientButton } from '@/components/gradient-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -12,6 +11,8 @@ import { Radius, Spacing } from '@/constants/theme';
 import { checkEmail } from '@/lib/email';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/use-theme';
+
+const MIN_PASSWORD = 8;
 
 type Mode = 'signIn' | 'signUp';
 
@@ -30,7 +31,6 @@ export function SignInScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   // Email problems are shown once the user leaves the field (or taps the button), not mid-typing.
   const [emailTouched, setEmailTouched] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const passwordRef = useRef<TextInput>(null);
 
   const emailCheck = checkEmail(email, { forSignUp: mode === 'signUp' });
@@ -88,139 +88,112 @@ export function SignInScreen() {
             </ThemedText>
           </Animated.View>
 
-          {resetting ? (
-            <ResetPassword
-              initialEmail={email}
-              onClose={() => {
-                setResetting(false);
-                setMode('signIn');
-              }}
-            />
-          ) : (
-            <>
-              <View style={[styles.segment, { backgroundColor: theme.backgroundSelected }]}>
-                {(['signIn', 'signUp'] as const).map((m) => {
-                  const selected = mode === m;
-                  return (
-                    <Pressable
-                      key={m}
-                      onPress={() => switchMode(m)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      style={[styles.segmentItem, selected && { backgroundColor: theme.backgroundElement }]}>
-                      <ThemedText type="smallBold" themeColor={selected ? 'text' : 'textSecondary'}>
-                        {m === 'signIn' ? 'Sign in' : 'Create account'}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Animated.View key={mode} entering={FadeIn.duration(150)} style={styles.form}>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@example.com"
-                  placeholderTextColor={theme.textSecondary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  keyboardType="email-address"
-                  textContentType={mode === 'signUp' ? 'username' : 'emailAddress'}
-                  returnKeyType="next"
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  onBlur={() => setEmailTouched(true)}
-                  style={[inputStyle, showEmailHint && !emailCheck.ok && { borderColor: theme.accentEnd, borderWidth: 1.5 }]}
-                  accessibilityLabel="Email"
-                  accessibilityHint={showEmailHint && !emailCheck.ok ? emailCheck.reason : undefined}
-                />
-                {showEmailHint && (!emailCheck.ok || emailCheck.suggestion) ? (
-                  <Animated.View entering={FadeIn.duration(150)} style={styles.emailHint}>
-                    {!emailCheck.ok ? (
-                      <ThemedText type="small" style={{ color: theme.accentEnd }}>
-                        {emailCheck.reason}
-                      </ThemedText>
-                    ) : null}
-                    {emailCheck.suggestion ? (
-                      <Pressable
-                        onPress={() => setEmail(emailCheck.suggestion!)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Use ${emailCheck.suggestion}`}>
-                        <ThemedText type="small" themeColor="textSecondary">
-                          Did you mean{' '}
-                          <ThemedText type="smallBold" themeColor="accentEnd">
-                            {emailCheck.suggestion}
-                          </ThemedText>
-                          ?
-                        </ThemedText>
-                      </Pressable>
-                    ) : null}
-                  </Animated.View>
-                ) : null}
-                <View>
-                  <TextInput
-                    ref={passwordRef}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder={mode === 'signUp' ? `Password (at least ${MIN_PASSWORD} characters)` : 'Password'}
-                    placeholderTextColor={theme.textSecondary}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
-                    textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
-                    returnKeyType="go"
-                    onSubmitEditing={submit}
-                    style={[inputStyle, styles.passwordInput]}
-                  />
-                  <Pressable
-                    onPress={() => setShowPassword((s) => !s)}
-                    hitSlop={10}
-                    style={styles.showToggle}
-                    accessibilityRole="button"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
-                    <ThemedText type="smallBold" themeColor="textSecondary">
-                      {showPassword ? 'Hide' : 'Show'}
-                    </ThemedText>
-                  </Pressable>
-                </View>
-                {mode === 'signIn' && (
-                  <Pressable
-                    onPress={() => {
-                      setError(null);
-                      setNotice(null);
-                      setResetting(true);
-                    }}
-                    hitSlop={8}
-                    style={styles.forgot}
-                    accessibilityRole="button">
-                    <ThemedText type="smallBold" themeColor="accentEnd">
-                      Forgot your password?
-                    </ThemedText>
-                  </Pressable>
-                )}
-                <GradientButton
-                  label={busy ? 'One sec…' : mode === 'signIn' ? 'Sign in' : 'Create account'}
-                  onPress={submit}
-                  disabled={!canSubmit}
-                />
-                {mode === 'signUp' && password.length > 0 && password.length < MIN_PASSWORD ? (
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-                    {MIN_PASSWORD - password.length} more characters
+          <View style={[styles.segment, { backgroundColor: theme.backgroundSelected }]}>
+            {(['signIn', 'signUp'] as const).map((m) => {
+              const selected = mode === m;
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => switchMode(m)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[styles.segmentItem, selected && { backgroundColor: theme.backgroundElement }]}>
+                  <ThemedText type="smallBold" themeColor={selected ? 'text' : 'textSecondary'}>
+                    {m === 'signIn' ? 'Sign in' : 'Create account'}
                   </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Animated.View key={mode} entering={FadeIn.duration(150)} style={styles.form}>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={theme.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              keyboardType="email-address"
+              textContentType={mode === 'signUp' ? 'username' : 'emailAddress'}
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              onBlur={() => setEmailTouched(true)}
+              style={[inputStyle, showEmailHint && !emailCheck.ok && { borderColor: theme.accentEnd, borderWidth: 1.5 }]}
+              accessibilityLabel="Email"
+              accessibilityHint={showEmailHint && !emailCheck.ok ? emailCheck.reason : undefined}
+            />
+            {showEmailHint && (!emailCheck.ok || emailCheck.suggestion) ? (
+              <Animated.View entering={FadeIn.duration(150)} style={styles.emailHint}>
+                {!emailCheck.ok ? (
+                  <ThemedText type="small" style={{ color: theme.accentEnd }}>
+                    {emailCheck.reason}
+                  </ThemedText>
+                ) : null}
+                {emailCheck.suggestion ? (
+                  <Pressable
+                    onPress={() => setEmail(emailCheck.suggestion!)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${emailCheck.suggestion}`}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Did you mean{' '}
+                      <ThemedText type="smallBold" themeColor="accentEnd">
+                        {emailCheck.suggestion}
+                      </ThemedText>
+                      ?
+                    </ThemedText>
+                  </Pressable>
                 ) : null}
               </Animated.View>
+            ) : null}
+            <View>
+              <TextInput
+                ref={passwordRef}
+                value={password}
+                onChangeText={setPassword}
+                placeholder={mode === 'signUp' ? `Password (at least ${MIN_PASSWORD} characters)` : 'Password'}
+                placeholderTextColor={theme.textSecondary}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
+                textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
+                returnKeyType="go"
+                onSubmitEditing={submit}
+                style={[inputStyle, styles.passwordInput]}
+              />
+              <Pressable
+                onPress={() => setShowPassword((s) => !s)}
+                hitSlop={10}
+                style={styles.showToggle}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {showPassword ? 'Hide' : 'Show'}
+                </ThemedText>
+              </Pressable>
+            </View>
+            <GradientButton
+              label={busy ? 'One sec…' : mode === 'signIn' ? 'Sign in' : 'Create account'}
+              onPress={submit}
+              disabled={!canSubmit}
+            />
+            {mode === 'signUp' && password.length > 0 && password.length < MIN_PASSWORD ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+                {MIN_PASSWORD - password.length} more characters
+              </ThemedText>
+            ) : null}
+          </Animated.View>
 
-              {error || notice ? (
-                <Animated.View entering={FadeIn.duration(150)} style={[styles.message, { backgroundColor: theme.accentSoft }]}>
-                  <ThemedText type="small" style={{ color: theme.accentEnd }}>
-                    {error ?? notice}
-                  </ThemedText>
-                </Animated.View>
-              ) : null}
-            </>
-          )}
+          {error || notice ? (
+            <Animated.View entering={FadeIn.duration(150)} style={[styles.message, { backgroundColor: theme.accentSoft }]}>
+              <ThemedText type="small" style={{ color: theme.accentEnd }}>
+                {error ?? notice}
+              </ThemedText>
+            </Animated.View>
+          ) : null}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </ThemedView>
@@ -228,7 +201,7 @@ export function SignInScreen() {
 }
 
 function friendlyError(message: string, mode: Mode) {
-  if (/invalid login credentials/i.test(message)) return 'Wrong email or password. Forgot it? Tap “Forgot your password?” above.';
+  if (/invalid login credentials/i.test(message)) return 'Wrong email or password.';
   if (/already registered|already exists/i.test(message)) return 'That email already has an account. Sign in instead.';
   if (/email not confirmed/i.test(message)) return 'Confirm your email first (check your inbox), then sign in.';
   if (/password/i.test(message) && mode === 'signUp') return message;
@@ -292,10 +265,6 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     marginTop: -Spacing.two,
     paddingHorizontal: Spacing.two,
-  },
-  forgot: {
-    alignSelf: 'flex-end',
-    marginTop: -Spacing.one,
   },
   passwordInput: {
     paddingRight: 64,

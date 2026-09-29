@@ -10,12 +10,6 @@ type Auth = {
   loading: boolean;
   userId: string | null;
   email: string | null;
-  /**
-   * True while a password reset is mid-way: the reset code signs the user in, but the app stays on
-   * the sign-in screen until the new password is saved.
-   */
-  recovering: boolean;
-  setRecovering: (value: boolean) => void;
   signOut: () => Promise<void>;
 };
 
@@ -24,7 +18,6 @@ const AuthContext = createContext<Auth | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
-  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -49,8 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         userId: session?.user.id ?? null,
         email: session?.user.email ?? null,
-        recovering,
-        setRecovering,
         signOut,
       }}>
       {children}

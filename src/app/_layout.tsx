@@ -53,10 +53,10 @@ export default function RootLayout() {
 
 /** Setup help → sign-in → onboarding → the app (with the intro tutorial on top, once). */
 function Gate() {
-  const { loading, userId, recovering } = useAuth();
+  const { loading, userId } = useAuth();
   if (!isSupabaseConfigured) return <SetupNeededScreen />;
   if (loading) return null;
-  if (!userId || recovering) return <SignInScreen />;
+  if (!userId) return <SignInScreen />;
   return (
     // Keyed by user so switching accounts starts from a clean store.
     <StoreProvider key={userId} myId={userId}>
